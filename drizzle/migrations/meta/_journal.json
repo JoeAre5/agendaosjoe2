@@ -183,6 +183,13 @@
       "when": 1794483105023,
       "tag": "0025_outbound_webhooks",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794483106023,
+      "tag": "0026_app_booking_email_switch",
+      "breakpoints": true
     }
   ]
 }

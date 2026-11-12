@@ -13,6 +13,7 @@
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { commitDraft } from "../_shared/commitDraft.ts";
+import { appBookingEmailsEnabled } from "../_shared/appEmailSwitch.ts";
 import { nativeQuote, nativeShopFor } from "../_shared/nativeDraft.ts";
 import { canAccessDraft, isAllowedReturnOrigin as guardOrigin } from "../_shared/accessGuards.ts";
 
@@ -814,7 +815,7 @@ Deno.serve(async (req) => {
       }
 
       /* ─── 4. SEND PAID BOOKING CONFIRMATION EMAIL (fire-and-forget) ─── */
-      if (draft.email) {
+      if (draft.email && (await appBookingEmailsEnabled(admin))) {
         const apptDate = new Date(commitResult.appointment.starts_at);
         const dateLabel = apptDate.toLocaleString("es-PR", {
           weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true,
@@ -829,7 +830,8 @@ Deno.serve(async (req) => {
           body: {
             templateName: "booking-confirmation",
             recipientEmail: draft.email,
-            idempotencyKey: `booking-paid-${commitResult.acuityId}`,
+            // Native bookings have no Acuity id: key on the appointment so each paid booking gets its own email.
+            idempotencyKey: `booking-paid-${commitResult.acuityId ?? commitResult.appointmentId}`,
             templateData: {
               clientName: draft.first_name,
               serviceName: commitResult.appointment.service_name,

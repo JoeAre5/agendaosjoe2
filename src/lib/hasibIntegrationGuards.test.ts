@@ -51,6 +51,12 @@ describe("Hasib integration exclusions", () => {
       expect(body.slice(0, body.indexOf("$$;", 10))).toMatch(/EXCEPTION WHEN OTHERS THEN/);
     }
   });
+  it("the app booking-confirmation emails respect the switch and native paid emails get their own key", () => {
+    for (const f of ["pay-then-book", "public-booking-create"]) {
+      expect(readFileSync(`supabase/functions/${f}/index.ts`, "utf8")).toContain("appBookingEmailsEnabled");
+    }
+    expect(readFileSync("supabase/functions/pay-then-book/index.ts", "utf8")).toContain("commitResult.acuityId ?? commitResult.appointmentId");
+  });
   it("no migration switches every shop to the native scheduler", () => {
     const sql = [
       ...readdirSync("drizzle/migrations").filter((f) => f.endsWith(".sql")).map((f) => readFileSync(`drizzle/migrations/${f}`, "utf8")),

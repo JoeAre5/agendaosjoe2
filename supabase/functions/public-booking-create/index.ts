@@ -5,6 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyOwners } from "../_shared/notifyOwners.ts";
 import { contactEmail } from "../_shared/contactEmail.ts";
 import { readAvailabilityDuration } from "./availabilityDuration.ts";
+import { appBookingEmailsEnabled } from "../_shared/appEmailSwitch.ts";
 import { BookingRejectedError, nativeRpcError } from "../_shared/nativeBooking.ts";
 import { nativeQuote, nativeShopFor } from "../_shared/nativeDraft.ts";
 import {
@@ -342,7 +343,7 @@ Deno.serve(async (req) => {
         } catch (e) {
           console.warn("notifyOwners setup warn:", (e as Error).message);
         }
-        if (emailTrim) {
+        if (emailTrim && (await appBookingEmailsEnabled(admin))) {
           const dateLabel = new Date(row.starts_at).toLocaleString("es-PR", {
             weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Puerto_Rico",
           });
@@ -473,7 +474,7 @@ Deno.serve(async (req) => {
       // Fire-and-forget: send unpaid booking confirmation email with Pay link.
       // Idempotency key derived from acuity_id ensures no duplicates if request is retried.
       const confirmationEmail = contactEmail(acuityData.email);
-      if (upserted?.id && confirmationEmail) {
+      if (upserted?.id && confirmationEmail && (await appBookingEmailsEnabled(admin))) {
         const apptDate = new Date(startsAt);
         const dateLabel = apptDate.toLocaleString("es-PR", {
           weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true,
