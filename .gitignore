@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Entorno de prueba (apunta al proyecto de prueba, no a produccion)
+.env.prueba
