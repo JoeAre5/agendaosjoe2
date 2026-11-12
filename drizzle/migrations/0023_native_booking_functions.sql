@@ -337,7 +337,7 @@ BEGIN
   WHERE id = _appointment_id;
 
   INSERT INTO public.audit_log (user_id, action, entity_type, entity_id, metadata)
-  VALUES (_actor_user_id, 'cancel_native_appointment', 'appointment', _appointment_id,
+  VALUES (COALESCE(_actor_user_id, '00000000-0000-0000-0000-000000000000'::uuid), 'cancel_native_appointment', 'appointment', _appointment_id,
     jsonb_build_object('reason', _reason, 'actor_role', _cancelled_by_role,
       'amount_paid_cents', v_appt.amount_paid_cents, 'starts_at', v_appt.starts_at));
 

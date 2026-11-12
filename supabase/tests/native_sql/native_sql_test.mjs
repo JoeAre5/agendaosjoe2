@@ -44,7 +44,7 @@ await db.exec(`
   CREATE TABLE public.block_times (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), shop_id uuid, barber_id uuid, starts_at timestamptz NOT NULL, ends_at timestamptz NOT NULL);
   CREATE TABLE public.booking_drafts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), shop_id uuid, barber_id uuid,
     appointment_type_id integer NOT NULL, calendar_id integer NOT NULL, status text NOT NULL DEFAULT 'pending', expires_at timestamptz);
-  CREATE TABLE public.audit_log (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, action text, entity_type text, entity_id uuid, metadata jsonb);
+  CREATE TABLE public.audit_log (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL, action text, entity_type text, entity_id uuid, metadata jsonb);
   CREATE TABLE public.working_hours (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), shop_id uuid, barber_id uuid, day_of_week integer NOT NULL, start_time time, end_time time, is_active boolean DEFAULT true);
   CREATE TABLE public.shop_hours (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), shop_id uuid, day_of_week integer NOT NULL, start_time time, end_time time, is_active boolean DEFAULT true);
 `);

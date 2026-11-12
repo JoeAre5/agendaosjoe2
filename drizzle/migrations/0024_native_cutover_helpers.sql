@@ -102,7 +102,7 @@ BEGIN
   UPDATE public.shops SET booking_provider = 'native', updated_at = now() WHERE id = _shop_id;
 
   INSERT INTO public.audit_log (user_id, action, entity_type, entity_id, metadata)
-  VALUES (_actor_user_id, 'switch_shop_to_native', 'shop', _shop_id,
+  VALUES (COALESCE(_actor_user_id, '00000000-0000-0000-0000-000000000000'::uuid), 'switch_shop_to_native', 'shop', _shop_id,
           jsonb_build_object('check', v_check, 'appointments_linked', v_linked));
 
   RETURN jsonb_build_object('success', true, 'provider', 'native', 'appointments_linked', v_linked, 'check', v_check);
@@ -126,7 +126,7 @@ BEGIN
   UPDATE public.shops SET booking_provider = 'acuity', updated_at = now() WHERE id = _shop_id;
 
   INSERT INTO public.audit_log (user_id, action, entity_type, entity_id, metadata)
-  VALUES (_actor_user_id, 'switch_shop_to_acuity', 'shop', _shop_id,
+  VALUES (COALESCE(_actor_user_id, '00000000-0000-0000-0000-000000000000'::uuid), 'switch_shop_to_acuity', 'shop', _shop_id,
           jsonb_build_object('future_native_only_appointments', v_native_only));
 
   RETURN jsonb_build_object('success', true, 'provider', 'acuity', 'future_native_only_appointments', v_native_only);
