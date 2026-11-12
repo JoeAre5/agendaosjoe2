@@ -30,11 +30,12 @@ describe("Hasib integration exclusions", () => {
     expect(fns).toContain("native-scheduling");
     expect(readFileSync("src/lib/scheduling/provider.ts", "utf8")).toMatch(/FALLBACK[^=]*=\s*\{[^}]*kind:\s*"acuity"/);
   });
+  // Solo se permite el cambio por tienda y por id (switch_shop_to_native); nunca un UPDATE global.
   it("no migration switches every shop to the native scheduler", () => {
     const sql = [
       ...readdirSync("drizzle/migrations").filter((f) => f.endsWith(".sql")).map((f) => readFileSync(`drizzle/migrations/${f}`, "utf8")),
       ...readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).map((f) => readFileSync(`supabase/migrations/${f}`, "utf8")),
     ].join("\n");
-    expect(sql).not.toMatch(/UPDATE\s+(public\.)?shops\s+SET\s+booking_provider\s*=\s*'native'/i);
+    expect(sql).not.toMatch(/UPDATE\s+(public\.)?shops\s+SET\s+booking_provider\s*=\s*'native'(?![^;]*WHERE\s+id\s*=)/i);
   });
 });
