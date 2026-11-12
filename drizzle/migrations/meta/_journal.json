@@ -190,6 +190,13 @@
       "when": 1794483106023,
       "tag": "0026_app_booking_email_switch",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794483107023,
+      "tag": "0027_schedule_exceptions",
+      "breakpoints": true
     }
   ]
 }

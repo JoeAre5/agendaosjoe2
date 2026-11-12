@@ -4923,6 +4923,48 @@ export type Database = {
           },
         ]
       }
+      schedule_exceptions: {
+        Row: {
+          barber_id: string | null
+          created_at: string
+          created_by: string | null
+          end_time: string | null
+          exception_date: string
+          id: string
+          is_closed: boolean
+          note: string | null
+          shop_id: string
+          start_time: string | null
+          updated_at: string
+        }
+        Insert: {
+          barber_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_time?: string | null
+          exception_date: string
+          id?: string
+          is_closed?: boolean
+          note?: string | null
+          shop_id?: string
+          start_time?: string | null
+          updated_at?: string
+        }
+        Update: {
+          barber_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_time?: string | null
+          exception_date?: string
+          id?: string
+          is_closed?: boolean
+          note?: string | null
+          shop_id?: string
+          start_time?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       shop_hours: {
         Row: {
           created_at: string

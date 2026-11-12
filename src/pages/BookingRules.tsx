@@ -87,7 +87,7 @@ export default function BookingRules() {
       max_advance_days: 90,
       padding_before_minutes: 0,
       padding_after_minutes: 0,
-      slot_interval_minutes: 15,
+      slot_interval_minutes: 30,
       max_per_day: null,
       cancel_window_hours: 24,
       cancel_deadline_type: "midnight_day_before",
@@ -252,7 +252,7 @@ export default function BookingRules() {
                   <Field
                     label={language === "es" ? "Intervalo de slots" : "Slot interval"}
                     value={rule.slot_interval_minutes}
-                    onChange={(v) => updateRule(rule.id, "slot_interval_minutes", parseInt(v) || 15)}
+                    onChange={(v) => updateRule(rule.id, "slot_interval_minutes", parseInt(v) || 30)}
                     suffix="min"
                   />
                   <Field

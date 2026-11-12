@@ -8,7 +8,11 @@
 // @ts-types="npm:@types/luxon@3.4.2"
 import { DateTime } from "npm:luxon@3.5.0";
 import { DEFAULT_RULES, localDateOf } from "./engine.ts";
-import type { AvailabilityInput, BarberInput, BookingRules, WeeklyInterval } from "./types.ts";
+import type { AvailabilityInput, BarberInput, BookingRules, ExceptionInput, WeeklyInterval } from "./types.ts";
+
+/** Intervalo de horas de la agenda nativa cuando no hay regla guardada: 30 min (pedido del cliente). El motor puro conserva 15. */
+export const NATIVE_DEFAULT_SLOT_MINUTES = 30;
+const NATIVE_DEFAULT_RULES: BookingRules = { ...DEFAULT_RULES, slotIntervalMinutes: NATIVE_DEFAULT_SLOT_MINUTES };
 
 // deno-lint-ignore no-explicit-any
 type Client = { from: (table: string) => any };
@@ -132,12 +136,12 @@ export function pickRules(
   const forBarber = barberId ? active.find((r) => r.scope === "barber" && r.barber_id === barberId) : undefined;
   const global = active.find((r) => r.scope === "global");
   const row = forService ?? forBarber ?? global;
-  if (!row) return { ...DEFAULT_RULES };
+  if (!row) return { ...NATIVE_DEFAULT_RULES };
   const num = (k: string, d: number) => (Number.isFinite(Number(row[k])) && row[k] !== null ? Number(row[k]) : d);
   return {
     minAdvanceMinutes: num("min_advance_minutes", DEFAULT_RULES.minAdvanceMinutes),
     maxAdvanceDays: num("max_advance_days", DEFAULT_RULES.maxAdvanceDays),
-    slotIntervalMinutes: num("slot_interval_minutes", DEFAULT_RULES.slotIntervalMinutes) || DEFAULT_RULES.slotIntervalMinutes,
+    slotIntervalMinutes: num("slot_interval_minutes", NATIVE_DEFAULT_SLOT_MINUTES) || NATIVE_DEFAULT_SLOT_MINUTES,
     paddingBeforeMinutes: num("padding_before_minutes", 0),
     paddingAfterMinutes: num("padding_after_minutes", 0),
     maxPerDay: row.max_per_day === null || row.max_per_day === undefined ? null : Number(row.max_per_day),
@@ -226,7 +230,7 @@ export async function loadAvailabilityInput(admin: Client, opts: LoadOptions): P
   // short range scan; nothing lasts longer than this margin.
   const scanStart = fromDay.startOf("day").minus({ days: 8 }).toUTC().toISO() as string;
 
-  const [whRes, apptRes, blockRes, holdRes] = await Promise.all([
+  const [whRes, apptRes, blockRes, holdRes, excRes] = await Promise.all([
     admin.from("working_hours").select("barber_id,day_of_week,start_time,end_time,is_active").eq("shop_id", shopId).in("barber_id", barberIds),
     (() => {
       let q = admin
@@ -266,11 +270,28 @@ export async function loadAvailabilityInput(admin: Client, opts: LoadOptions): P
       if (opts.excludeDraftId) q = q.neq("draft_id", opts.excludeDraftId);
       return q;
     })(),
+    // Excepciones por fecha (dias cerrados u horario especial). Se leen por fecha local, sin margen.
+    admin
+      .from("schedule_exceptions")
+      .select("barber_id,exception_date,is_closed,start_time,end_time")
+      .eq("shop_id", shopId)
+      .gte("exception_date", opts.from)
+      .lte("exception_date", opts.to)
+      .or(`barber_id.is.null,barber_id.in.(${barberIds.join(",")})`),
   ]);
   if (whRes.error) fail(whRes.error, "working_hours_read_failed");
   if (apptRes.error) fail(apptRes.error, "appointments_read_failed");
   if (blockRes.error) fail(blockRes.error, "block_times_read_failed");
   if (holdRes.error) fail(holdRes.error, "holds_read_failed");
+  // 42P01 = tabla inexistente: si la funcion se despliega antes de la migracion 0027, no se rompe la disponibilidad.
+  if (excRes.error && (excRes.error as { code?: string }).code !== "42P01") fail(excRes.error, "schedule_exceptions_read_failed");
+  const exceptions: ExceptionInput[] = ((excRes.error ? [] : excRes.data) as Array<Record<string, unknown>> ?? []).map((x) => ({
+    barberId: x.barber_id === null || x.barber_id === undefined ? null : String(x.barber_id),
+    date: String(x.exception_date).slice(0, 10),
+    closed: x.is_closed === true,
+    start: x.start_time ? String(x.start_time).slice(0, 5) : undefined,
+    end: x.end_time ? String(x.end_time).slice(0, 5) : undefined,
+  }));
 
   type Row = Record<string, unknown>;
   const byBarber = <T extends Row>(rows: T[] | null | undefined) => {
@@ -299,7 +320,7 @@ export async function loadAvailabilityInput(admin: Client, opts: LoadOptions): P
     holds: (holds.get(b.id) ?? []).map((h) => ({ start: String(h.starts_at), end: String(h.ends_at) })),
   }));
 
-  return { input: { ...inputBase, barbers: barberInputs }, shop, service, addons, barbers, rules };
+  return { input: { ...inputBase, exceptions, barbers: barberInputs }, shop, service, addons, barbers, rules };
 }
 
 /** Local day of an instant in the shop zone, for single-slot checks. */

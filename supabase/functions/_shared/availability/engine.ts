@@ -238,11 +238,37 @@ interface BarberDay {
   appointmentsToday: number;
 }
 
+/**
+ * Windows an exception dictates for this barber and day, or null when none applies. A barber-specific
+ * exception wins over a shop-wide one; "closed" yields no window; otherwise the listed ranges replace
+ * the weekly hours of that date.
+ */
+function exceptionWindows(input: AvailabilityInput, barberId: string, day: DateTime): Range[] | null {
+  const list = input.exceptions;
+  if (!list || list.length === 0) return null;
+  const iso = day.toISODate();
+  const own = list.filter((e) => e.date === iso && e.barberId === barberId);
+  const scoped = own.length > 0 ? own : list.filter((e) => e.date === iso && e.barberId === null);
+  if (scoped.length === 0) return null;
+  if (scoped.some((e) => e.closed)) return [];
+  const out: Range[] = [];
+  for (const e of scoped) {
+    const start = parseClock(e.start ?? "");
+    const end = parseClock(e.end ?? "");
+    if (!start || !end) continue;
+    const s = day.set(start).toMillis();
+    const en = day.set(end).toMillis();
+    if (en > s) out.push({ s, e: en });
+  }
+  return normalize(out);
+}
+
 function barberDay(ctx: Ctx, input: AvailabilityInput, barber: BarberInput, day: DateTime): BarberDay {
   const dayRange: Range = { s: day.toMillis(), e: day.plus({ days: 1 }).startOf("day").toMillis() };
+  const override = exceptionWindows(input, barber.id, day);
   const shop = input.shopHours.length > 0 ? weeklyRanges(input.shopHours, day) : [dayRange];
   const work = weeklyRanges(barber.workingHours, day);
-  const windows = intersect(shop, work);
+  const windows = override ?? intersect(shop, work);
 
   // Padding may reach into the neighbouring day, so look slightly outside it.
   const around: Range = { s: dayRange.s - ctx.padBeforeMs, e: dayRange.e + ctx.padAfterMs };

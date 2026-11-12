@@ -10,6 +10,7 @@ import { format, addMonths, subMonths, startOfMonth, getDaysInMonth, getDay, isS
 import { es, enUS } from "date-fns/locale";
 import { schedulingProxy as acuityProxy, useShopProvider } from "@/lib/scheduling";
 import { HoursEditor } from "@/components/scheduling/HoursEditor";
+import { ExceptionsEditor } from "@/components/scheduling/ExceptionsEditor";
 
 /* ─── Barber colors ─── */
 const BARBER_COLORS: Record<string, string> = {
@@ -55,7 +56,7 @@ export default function Availability() {
 
   const [calendars, setCalendars] = useState<AcuityCalendar[]>([]);
 
-  const { isNative } = useShopProvider();
+  const { provider, isNative } = useShopProvider();
   // Stable reference: the editor reloads when the barber list changes, not on every render.
   const hoursBarbers = useMemo(
     () => calendars.map((cal) => ({ id: String((cal as { barberId?: string | null }).barberId ?? cal.id), name: cal.name, color: getBarberColor(cal.name) })),
@@ -176,6 +177,13 @@ export default function Availability() {
             barbers={hoursBarbers}
             canEditShop
             editableBarberIds="all"
+          />
+          <ExceptionsEditor
+            language={language === "es" ? "es" : "en"}
+            barbers={hoursBarbers}
+            canEditShop
+            editableBarberIds="all"
+            timezone={provider?.timezone ?? "America/Puerto_Rico"}
           />
           <p className="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
             {language === "es" ? "Vista previa de disponibilidad" : "Availability preview"}

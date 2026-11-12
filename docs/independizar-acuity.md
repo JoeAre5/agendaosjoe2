@@ -28,6 +28,11 @@ Pedido del cliente: que los servicios, los horarios y la disponibilidad dejen de
 | Probar contra un Supabase de prueba con el esquema real, pasarelas en modo prueba | **Pendiente. Bloquea el corte.** |
 | Corte real de la tienda | **Pendiente, requiere aprobación expresa.** |
 
+## Pedidos del cliente tras su primera prueba (12-nov-2026)
+- **Horario partido / almuerzo:** cada día admite varios rangos; lo que queda fuera de los rangos está cerrado (9:00–12:00 y 13:00–17:00). El editor tiene atajos "Almuerzo 12–1" y "Copiar a los demás días".
+- **Intervalos de 30 minutos:** valor por defecto de la agenda nativa y de las reglas nuevas; las reglas existentes se cambian en Reglas de Reserva.
+- **Excepciones por fecha** (`0027`, `schedule_exceptions`): cerrar un día o darle otro horario, para todos o para un barbero. Reemplaza el horario semanal de esa fecha; no cancela citas ya existentes (la pantalla avisa cuántas hay).
+
 ## Instructivo de corte (solo cuando se autorice)
 Todo esto se hace en un **proyecto de prueba** primero. En producción solo tras ensayo completo y con Charlie enterado.
 

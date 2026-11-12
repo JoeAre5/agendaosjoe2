@@ -23,6 +23,22 @@ export interface Block extends Interval {
   isAllDay?: boolean;
 }
 
+/**
+ * A date-specific exception to the weekly hours (a holiday, a day off, special hours).
+ * `barberId = null` applies to every barber. It REPLACES the weekly hours of that date
+ * (shop and barber) for its scope; a barber-specific exception wins over a shop-wide one.
+ * Several non-closed rows for the same scope and date form a split shift.
+ */
+export interface ExceptionInput {
+  barberId: string | null;
+  /** Local calendar day in the shop timezone, YYYY-MM-DD. */
+  date: string;
+  closed: boolean;
+  /** "HH:mm" — only when not closed. */
+  start?: string;
+  end?: string;
+}
+
 export interface BarberInput {
   id: string;
   workingHours: WeeklyInterval[];
@@ -66,6 +82,8 @@ export interface AvailabilityInput {
    * mention.
    */
   shopHours: WeeklyInterval[];
+  /** Date-specific exceptions to the weekly hours (optional). */
+  exceptions?: ExceptionInput[];
   barbers: BarberInput[];
 }
 

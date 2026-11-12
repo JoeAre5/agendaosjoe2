@@ -279,3 +279,97 @@ Deno.test("localDateOf converts an instant to the shop's calendar day", () => {
   assertEquals(localDateOf("2026-09-08T22:30:00-04:00", TZ), "2026-09-08");
   assertEquals(localDateOf("nope", TZ), null);
 });
+
+// ─── Pedidos del cliente: almuerzo, intervalos de 30 min y excepciones por fecha ─────────────────
+
+const lunchHours = (days: number[]): WeeklyInterval[] => [
+  ...hours(days, "09:00", "12:00"),
+  ...hours(days, "13:00", "17:00"),
+];
+
+Deno.test("almuerzo: 9-12 y 13-17 cierra la hora de almuerzo", () => {
+  const r = computeAvailability(input({ barbers: [barber({ workingHours: lunchHours([2, 3, 4, 5, 6]) })] }));
+  const s = starts(r);
+  assert(s.includes("09:00") && s.includes("11:30"), "mañana");
+  assert(!s.includes("12:00") && !s.includes("12:30") && !s.includes("11:45"), "almuerzo cerrado");
+  assert(s.includes("13:00") && s.includes("16:30"), "tarde");
+});
+
+Deno.test("intervalo de 30 minutos: la rejilla avanza de 30 en 30 en cada tramo", () => {
+  const r = computeAvailability(input({
+    rules: { ...DEFAULT_RULES, slotIntervalMinutes: 30 },
+    shopHours: lunchHours([2, 3, 4, 5, 6]),
+    barbers: [barber({ workingHours: lunchHours([2, 3, 4, 5, 6]) })],
+  }));
+  assertEquals(starts(r), [
+    "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+    "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
+  ]);
+});
+
+Deno.test("excepcion: cerrar un dia concreto lo quita de la disponibilidad", () => {
+  const r = computeAvailability(input({ exceptions: [{ barberId: "b1", date: TUE, closed: true }] }));
+  assertEquals(starts(r), []);
+  assertEquals(r.days.length, 0);
+});
+
+Deno.test("excepcion para todos los barberos (barberId null) cierra a todos", () => {
+  const r = computeAvailability(input({
+    barbers: [barber(), barber({ id: "b2" })],
+    exceptions: [{ barberId: null, date: TUE, closed: true }],
+  }));
+  assertEquals(r.days.length, 0);
+});
+
+Deno.test("excepcion: horario especial reemplaza el horario normal de ese dia", () => {
+  const r = computeAvailability(input({
+    rules: { ...DEFAULT_RULES, slotIntervalMinutes: 30 },
+    exceptions: [{ barberId: "b1", date: TUE, closed: false, start: "10:00", end: "14:00" }],
+  }));
+  assertEquals(starts(r), ["10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"]);
+});
+
+Deno.test("excepcion puede abrir un dia que normalmente esta cerrado", () => {
+  // Lunes 2026-09-14: el barbero y el negocio no trabajan los lunes.
+  const MON = "2026-09-14";
+  const base = input({ from: MON, to: MON });
+  assertEquals(computeAvailability(base).days.length, 0);
+  const r = computeAvailability({ ...base, exceptions: [{ barberId: "b1", date: MON, closed: false, start: "09:00", end: "11:00" }] });
+  assertEquals(starts(r, MON), ["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30"]);
+});
+
+Deno.test("excepcion de un barbero gana a la de todos; el otro barbero sigue la general", () => {
+  const r = computeAvailability(input({
+    rules: { ...DEFAULT_RULES, slotIntervalMinutes: 30 },
+    barbers: [barber(), barber({ id: "b2" })],
+    exceptions: [
+      { barberId: null, date: TUE, closed: true },
+      { barberId: "b1", date: TUE, closed: false, start: "09:00", end: "10:00" },
+    ],
+  }));
+  const day = r.days.find((d) => d.date === TUE);
+  assertEquals((day?.slots ?? []).map((s) => `${s.barberId}@${s.startsAt.slice(11, 16)}`), ["b1@09:00", "b1@09:30"]);
+});
+
+Deno.test("excepcion con horario partido: varias filas el mismo dia", () => {
+  const r = computeAvailability(input({
+    rules: { ...DEFAULT_RULES, slotIntervalMinutes: 30 },
+    exceptions: [
+      { barberId: "b1", date: TUE, closed: false, start: "09:00", end: "10:00" },
+      { barberId: "b1", date: TUE, closed: false, start: "15:00", end: "16:00" },
+    ],
+  }));
+  assertEquals(starts(r), ["09:00", "09:30", "15:00", "15:30"]);
+});
+
+Deno.test("excepcion solo afecta a su fecha", () => {
+  const WED = "2026-09-09";
+  const r = computeAvailability(input({ from: TUE, to: WED, exceptions: [{ barberId: "b1", date: TUE, closed: true }] }));
+  assertEquals(starts(r).length, 0);
+  assert(starts(r, WED).length > 0);
+});
+
+Deno.test("checkSlot rechaza un horario en un dia cerrado por excepcion", () => {
+  const res = checkSlot(input({ exceptions: [{ barberId: "b1", date: TUE, closed: true }] }), "b1", "2026-09-08T10:00:00-04:00");
+  assertEquals(res.ok, false);
+});

@@ -4,10 +4,11 @@
 // The availability engine offers slots only inside shop hours ∩ working
 // hours, so this page is where a native shop's calendar is shaped.
 //
-// One interval per weekday is edited here; a day with several rows (split
-// shift) keeps its extra rows untouched and shows a note.
+// Each weekday holds one or more ranges (split shift): e.g. 09:00–12:00 and
+// 13:00–17:00 closes the lunch hour automatically. Everything outside the
+// listed ranges is closed.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Switch } from "@/components/ui/switch";
@@ -19,51 +20,15 @@ const t = (language: Lang, es: string, en: string) => (language === "es" ? es : 
 const DAYS_ES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 const DAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-interface HourRow {
-  id: string;
-  day_of_week: number;
-  start_time: string;
-  end_time: string;
-  is_active: boolean;
-  barber_id?: string | null;
-}
-
-/** Editable week: one entry per weekday. */
-interface DayState {
-  id: string | null;
-  active: boolean;
-  start: string;
-  end: string;
-  extra: number;
-}
-
-const DEFAULT_START = "09:00";
-const DEFAULT_END = "17:00";
-const hhmm = (v: string) => String(v).slice(0, 5);
-
-function weekFromRows(rows: HourRow[]): DayState[] {
-  const week: DayState[] = Array.from({ length: 7 }, () => ({ id: null, active: false, start: DEFAULT_START, end: DEFAULT_END, extra: 0 }));
-  const sorted = [...rows].sort((a, b) => a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time));
-  for (const r of sorted) {
-    const d = week[r.day_of_week];
-    if (!d) continue;
-    if (d.id === null) {
-      d.id = r.id;
-      d.active = r.is_active;
-      d.start = hhmm(r.start_time);
-      d.end = hhmm(r.end_time);
-    } else {
-      d.extra++;
-    }
-  }
-  return week;
-}
+import { type DayState, type HourRange, type HourRow, canSplitLunch, dayProblem, splitLunch, weekFromRows } from "./hoursModel";
 
 export interface HoursBarber {
   id: string;
   name: string;
   color?: string | null;
 }
+
+const timeInputStyle = { background: "transparent", color: "var(--text-primary)", borderColor: "var(--border-color, #444)" } as const;
 
 export function HoursEditor({
   language,
@@ -119,41 +84,62 @@ export function HoursEditor({
   };
   const patchDay = (dow: number, patch: Partial<DayState>) =>
     setWeek(week.map((d, i) => (i === dow ? { ...d, ...patch } : d)));
+  const patchRange = (dow: number, idx: number, patch: Partial<HourRange>) =>
+    patchDay(dow, { ranges: week[dow].ranges.map((r, i) => (i === idx ? { ...r, ...patch } : r)) });
+  const addRange = (dow: number) => {
+    const last = week[dow].ranges[week[dow].ranges.length - 1];
+    // Next range starts an hour after the previous one ends (clamped to the day).
+    const [h, m] = (last?.end ?? "12:00").split(":").map(Number);
+    const startH = Math.min(h + 1, 22);
+    const start = `${String(startH).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    const end = `${String(Math.min(startH + 4, 23)).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    patchDay(dow, { ranges: [...week[dow].ranges, { id: null, start, end }] });
+  };
+  const removeRange = (dow: number, idx: number) =>
+    patchDay(dow, { ranges: week[dow].ranges.filter((_, i) => i !== idx) });
+
+  /** Copies one day's ranges to every other active day. */
+  const copyDayToAll = (dow: number) => {
+    const src = week[dow];
+    setWeek(week.map((d, i) => (i === dow || !d.active ? d : { ...d, ranges: src.ranges.map((r) => ({ id: null, start: r.start, end: r.end })) })));
+    toast.success(t(language, "Copiado a los demás días activos. Falta guardar.", "Copied to the other active days. Remember to save."));
+  };
 
   const save = async () => {
     const target = selectedBarber;
     for (const d of week) {
-      if (d.active && d.end <= d.start) {
+      const problem = dayProblem(d);
+      if (problem === "order") {
         toast.error(t(language, "La hora de cierre debe ser después de la apertura", "Closing time must be after opening time"));
         return;
       }
+      if (problem === "overlap") {
+        toast.error(t(language, "Los rangos de un mismo día no pueden superponerse", "Ranges on the same day cannot overlap"));
+        return;
+      }
     }
+    const table = target === "shop" ? "shop_hours" : "working_hours";
     setSaving(target);
     try {
       for (let dow = 0; dow < 7; dow++) {
         const d = week[dow];
-        const row = {
-          day_of_week: dow,
-          start_time: `${d.start}:00`,
-          end_time: `${d.end}:00`,
-          is_active: d.active,
-        };
-        let error: { message: string } | null = null;
-        if (target === "shop") {
-          ({ error } = d.id
-            ? await supabase.from("shop_hours").update(row).eq("id", d.id)
-            : d.active
-              ? await supabase.from("shop_hours").insert(row)
-              : { error: null });
-        } else {
-          const barberRow = { ...row, barber_id: target };
-          ({ error } = d.id
-            ? await supabase.from("working_hours").update(barberRow).eq("id", d.id)
-            : d.active
-              ? await supabase.from("working_hours").insert(barberRow)
-              : { error: null });
+        const keep = new Set(d.ranges.filter((r) => r.id).map((r) => r.id as string));
+        const gone = d.origIds.filter((id) => !keep.has(id));
+        if (gone.length > 0) {
+          const { error } = await supabase.from(table).delete().in("id", gone);
+          if (error) throw error;
         }
-        if (error) throw error;
+        for (const r of d.ranges) {
+          const base = { day_of_week: dow, start_time: `${r.start}:00`, end_time: `${r.end}:00`, is_active: d.active };
+          const row = target === "shop" ? base : { ...base, barber_id: target };
+          if (r.id) {
+            const { error } = await supabase.from(table).update(row).eq("id", r.id);
+            if (error) throw error;
+          } else if (d.active) {
+            const { error } = await supabase.from(table).insert(row);
+            if (error) throw error;
+          }
+        }
       }
       toast.success(t(language, "Horario guardado", "Hours saved"));
       await load();
@@ -166,7 +152,13 @@ export function HoursEditor({
 
   const copyShopHours = () => {
     if (selectedBarber === "shop") return;
-    setWeek(week.map((d, i) => ({ ...d, active: shopWeek[i].active, start: shopWeek[i].start, end: shopWeek[i].end })));
+    setWeek(
+      week.map((d, i) => ({
+        ...d,
+        active: shopWeek[i].active,
+        ranges: shopWeek[i].ranges.map((r) => ({ id: null, start: r.start, end: r.end })),
+      })),
+    );
   };
 
   const tabs = useMemo(
@@ -186,6 +178,9 @@ export function HoursEditor({
       </div>
     );
   }
+
+  const editable = canEdit(selectedBarber);
+  const linkBtn = "text-[11px] font-semibold underline-offset-2 hover:underline";
 
   return (
     <div className="px-4 pb-4">
@@ -211,45 +206,76 @@ export function HoursEditor({
       <p className="text-xs mb-2" style={{ color: "var(--text-secondary)" }}>
         {selectedBarber === "shop"
           ? t(language, "Horario del negocio. Ningún barbero puede recibir citas fuera de este horario.", "Shop hours. No barber can take bookings outside them.")
-          : t(language, "Horario de trabajo del barbero, dentro del horario del negocio.", "The barber's working hours, inside the shop hours.")}
+          : t(language, "Horario de trabajo del barbero, dentro del horario del negocio.", "The barber's working hours, inside the shop hours.")}{" "}
+        {t(language, "Lo que queda fuera de los rangos está cerrado: para el almuerzo, usa dos rangos (por ejemplo 9:00–12:00 y 13:00–17:00).", "Anything outside the ranges is closed: for a lunch break use two ranges (for example 9:00–12:00 and 1:00–5:00 pm).")}
       </p>
 
       <div className="rounded-xl overflow-hidden card-elevated">
         {week.map((d, dow) => (
           <div
             key={dow}
-            className="flex items-center gap-3 px-3 py-2"
+            className="px-3 py-2"
             style={{ borderBottom: dow < 6 ? "1px solid var(--border-color, rgba(127,127,127,0.2))" : undefined, opacity: d.active ? 1 : 0.6 }}
           >
-            <span className="w-9 text-sm font-medium">{days[dow]}</span>
-            <Switch checked={d.active} disabled={!canEdit(selectedBarber)} onCheckedChange={(v) => patchDay(dow, { active: v })} />
-            <input
-              type="time"
-              value={d.start}
-              disabled={!d.active || !canEdit(selectedBarber)}
-              onChange={(e) => patchDay(dow, { start: e.target.value })}
-              className="flex-1 min-w-0 rounded-md border px-2 py-1 text-sm"
-              style={{ background: "transparent", color: "var(--text-primary)", borderColor: "var(--border-color, #444)" }}
-            />
-            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>–</span>
-            <input
-              type="time"
-              value={d.end}
-              disabled={!d.active || !canEdit(selectedBarber)}
-              onChange={(e) => patchDay(dow, { end: e.target.value })}
-              className="flex-1 min-w-0 rounded-md border px-2 py-1 text-sm"
-              style={{ background: "transparent", color: "var(--text-primary)", borderColor: "var(--border-color, #444)" }}
-            />
-            {d.extra > 0 && (
-              <span className="text-[10px]" style={{ color: "var(--text-secondary)" }} title={t(language, "Turno partido: filas adicionales sin editar", "Split shift: extra rows untouched")}>
-                +{d.extra}
-              </span>
+            {d.ranges.map((r, idx) => (
+              <div key={idx} className="flex items-center gap-3 py-0.5">
+                <span className="w-9 text-sm font-medium">{idx === 0 ? days[dow] : ""}</span>
+                {idx === 0 ? (
+                  <Switch checked={d.active} disabled={!editable} onCheckedChange={(v) => patchDay(dow, { active: v })} />
+                ) : (
+                  <span className="w-[44px]" />
+                )}
+                <input
+                  type="time"
+                  value={r.start}
+                  disabled={!d.active || !editable}
+                  onChange={(e) => patchRange(dow, idx, { start: e.target.value })}
+                  className="flex-1 min-w-0 rounded-md border px-2 py-1 text-sm"
+                  style={timeInputStyle}
+                />
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>–</span>
+                <input
+                  type="time"
+                  value={r.end}
+                  disabled={!d.active || !editable}
+                  onChange={(e) => patchRange(dow, idx, { end: e.target.value })}
+                  className="flex-1 min-w-0 rounded-md border px-2 py-1 text-sm"
+                  style={timeInputStyle}
+                />
+                {d.ranges.length > 1 && editable && d.active ? (
+                  <button
+                    onClick={() => removeRange(dow, idx)}
+                    aria-label={t(language, "Quitar rango", "Remove range")}
+                    className="p-1 rounded-full active:opacity-60"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    <X size={14} />
+                  </button>
+                ) : (
+                  <span className="w-[22px]" />
+                )}
+              </div>
+            ))}
+            {d.active && editable && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 pl-[52px] pt-1">
+                <button className={linkBtn} style={{ color: "var(--accent-color)" }} onClick={() => addRange(dow)}>
+                  <Plus size={11} className="inline -mt-0.5" /> {t(language, "Rango", "Range")}
+                </button>
+                {canSplitLunch(d) && (
+                  <button className={linkBtn} style={{ color: "var(--accent-color)" }} onClick={() => patchDay(dow, splitLunch(d))}>
+                    {t(language, "Almuerzo 12–1", "Lunch 12–1")}
+                  </button>
+                )}
+                <button className={linkBtn} style={{ color: "var(--text-secondary)" }} onClick={() => copyDayToAll(dow)}>
+                  {t(language, "Copiar a los demás días", "Copy to other days")}
+                </button>
+              </div>
             )}
           </div>
         ))}
       </div>
 
-      {canEdit(selectedBarber) && (
+      {editable && (
         <div className="flex gap-2 pt-3">
           {selectedBarber !== "shop" && (
             <Button variant="outline" className="flex-1" onClick={copyShopHours}>

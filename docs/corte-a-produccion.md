@@ -24,9 +24,10 @@ Comprobar también, con una consulta de lectura, que existen `shops` (una sola f
 Idealmente con `supabase db dump --schema-only` de producción en un proyecto vacío, y aplicar allí los pasos 3 a 7. Si el ensayo falla, producción no se toca.
 
 ## 3. Aplicar migraciones (en orden, una por una, comprobando cada resultado)
-`drizzle/migrations`: `0022`, `0023`, `0024`, `0025`, `0026`. Todas son aditivas: no borran ni cambian datos y **no cambian ninguna tienda a nativo**.
+`drizzle/migrations`: `0022`, `0023`, `0024`, `0025`, `0026`, `0027`. Todas son aditivas: no borran ni cambian datos y **no cambian ninguna tienda a nativo**.
 - `0022` ids de Acuity opcionales y referencias nativas. `0023` funciones de reservar/reprogramar/cancelar. `0024` herramientas de corte y `get_shop_booking_provider()`.
 - `0025` webhooks de salida (no envía nada mientras no haya destinos). `0026` interruptor de correos (encendido).
+- `0027` excepciones de horario por fecha (tabla `schedule_exceptions`) y 30 min como valor por defecto de reglas nuevas.
 Reversa de cada una: ver su comentario "Rollback" en el archivo.
 
 ## 4. Desplegar funciones
@@ -43,7 +44,8 @@ INSERT INTO public.outbound_webhook_endpoints (name, url, event_types) VALUES ('
 Aviso: **mientras la tienda siga en Acuity**, la sincronización escribe citas en la base y cada una dispararía eventos hacia GoHighLevel (incluidas ediciones que hace el sync). Recomendación: cargar el destino cuando la tienda pase a nativo, o filtrar `event_types` a lo que interese. Detalle en `docs/webhooks-gohighlevel.md`.
 
 ## 7. Corte de la tienda (solo con aprobación expresa)
-1. Revisar el catálogo en el admin: servicios, complementos y horarios por barbero y de la tienda (hoy es lo que sincronizó Acuity).
+1. Revisar el catálogo en el admin: servicios, complementos y horarios por barbero y de la tienda (hoy es lo que sincronizó Acuity). Definir ahí el **horario partido** (almuerzo, por ejemplo 9:00–12:00 y 13:00–17:00) y las **excepciones por fecha** (feriados, días libres).
+   Poner el **intervalo de horas en 30 minutos**: las reglas ya guardadas conservan su valor (en producción puede ser 15). Se cambia desde Reglas de Reserva o con `UPDATE public.booking_rules SET slot_interval_minutes = 30 WHERE scope = 'global';`.
 2. `select native_cutover_check('<shop_id>');` debe dar `ready: true`.
 3. Probar en un navegador aparte (reserva pública con y sin pago de prueba, admin crear/mover/cancelar) **antes** de cortar, con una tienda de ensayo si es posible.
 4. `select switch_shop_to_native('<shop_id>', '<user_id>');` (enlaza las citas futuras de Acuity y queda en `audit_log`).
