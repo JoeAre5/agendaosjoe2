@@ -21,3 +21,15 @@ El repo no define `shops`, `current_shop_id()` ni `resolve_single_active_shop()`
 
 ## Qué NO prueba este entorno
 Es una aproximación. Puede diferir de producción en políticas RLS, funciones creadas desde el panel y datos. Hay que contrastarlo con un `supabase db dump --schema-only` real cuando exista.
+
+## Revisión del 12-nov-2026 (sitio de prueba en Vercel)
+Comparando los tipos generados (producción) con el proyecto de prueba: de 101 tablas y 85 funciones solo faltaba una columna, `transactions.gateway_fee_cents` (producción la tiene; ninguna migración del repo la crea, se hizo desde el panel). Se añadió a mano en el proyecto de prueba: `integer NOT NULL DEFAULT 0`.
+
+Ajustes de datos del entorno de prueba (no son esquema): una fila inicial en `shop_settings`.
+
+Hallazgos que **no** se corrigieron porque probablemente existen también en producción:
+- `/admin/settings` devuelve 403 al leer `shop_settings_public` (vista `security_invoker`; `authenticated` no tiene SELECT sobre las columnas de marca). La app lo ignora y muestra el nombre en texto.
+
+Error propio encontrado y corregido: en `public-booking-create` se perdieron las barras de la expresión de fecha de `list-times` (devolvía siempre "Invalid date"). Las pruebas locales no lo detectaban porque solo cubrían la base de datos.
+
+Prueba de punta a punta (función desplegada + base de prueba): catálogo, fechas y horas públicas, reserva sin pago, rechazo de doble reserva (`slot_taken`) y horas disponibles que bajan tras reservar.

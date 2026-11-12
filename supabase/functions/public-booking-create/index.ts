@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
         }
         if (action === "list-times") {
           if (!q.serviceId || !q.date) return jsonRes({ error: "Missing fields" }, 400);
-          if (!/^d{4}-d{2}-d{2}$/.test(String(q.date))) return jsonRes({ error: "Invalid date" }, 400);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(String(q.date))) return jsonRes({ error: "Invalid date" }, 400);
           return jsonRes(await nativeListTimes(nAdmin, nativeShopId, { serviceId: q.serviceId, barberId: q.barberId, addonIds: q.addonIds, date: q.date }));
         }
       } catch (e) {
