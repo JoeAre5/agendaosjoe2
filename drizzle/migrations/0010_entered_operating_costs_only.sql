@@ -1,0 +1,11 @@
+ALTER TABLE public.operational_expenses ADD COLUMN is_active boolean NOT NULL DEFAULT true;
+ALTER TABLE public.operational_expenses DROP CONSTRAINT operational_expense_frequency_valid;
+ALTER TABLE public.operational_expenses ADD CONSTRAINT operational_expense_frequency_valid CHECK (frequency IN ('once','daily','weekly','monthly'));
+COMMENT ON COLUMN public.operational_expenses.expense_date IS 'Date for one-time expenses only. Recurring costs apply to full selected cycles, not from their creation date.';
+COMMENT ON COLUMN public.operational_expenses.end_date IS 'DEPRECATED: recurring costs use is_active, with no date clipping.';
+COMMENT ON COLUMN public.shop_settings.fixed_weekly_expenses_cents IS 'DEPRECATED: imposed budget retired; Home uses only entered operational_expenses. Retained for older deployed financial RPC compatibility.';
+ALTER TABLE public.shop_settings ALTER COLUMN fixed_weekly_expenses_cents SET DEFAULT 0;
+COMMENT ON TABLE public.home_expense_settings IS 'DEPRECATED: source selection retired; Home uses operational_expenses exclusively.';
+CREATE OR REPLACE FUNCTION public.get_home_expense_context() RETURNS TABLE(shop_id uuid, recurring_source text, fixed_weekly_expenses_cents integer) LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$ DECLARE selected_shop uuid := public.current_shop_id(); BEGIN IF selected_shop IS NULL OR NOT (public.has_shop_role(selected_shop,'owner') OR public.has_shop_role(selected_shop,'super_owner')) THEN RAISE EXCEPTION 'permission denied: home expenses'; END IF; RETURN QUERY SELECT selected_shop, 'detailed'::text, 0; END; $$;
+REVOKE ALL ON FUNCTION public.get_home_expense_context() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_home_expense_context() TO authenticated, service_role;

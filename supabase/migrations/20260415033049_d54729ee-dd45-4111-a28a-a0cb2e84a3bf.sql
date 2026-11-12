@@ -1,0 +1,1 @@
+UPDATE public.clients SET stripe_customer_id = NULL, card_brand = NULL, card_last4 = NULL WHERE stripe_customer_id = 'cus_UKzit2hH6jg71R';

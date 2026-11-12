@@ -1,0 +1,1 @@
+ALTER TABLE public.trusted_devices ADD CONSTRAINT trusted_devices_user_fp_unique UNIQUE (user_id, device_fingerprint);

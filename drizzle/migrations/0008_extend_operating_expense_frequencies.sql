@@ -1,0 +1,11 @@
+ALTER TABLE public.operational_expenses ADD COLUMN description text NOT NULL DEFAULT '', ADD COLUMN frequency text NOT NULL DEFAULT 'once', ADD COLUMN end_date date;
+ALTER TABLE public.operational_expenses ADD CONSTRAINT operational_expense_frequency_valid CHECK (frequency IN ('once','weekly','monthly')), ADD CONSTRAINT operational_expense_description_length CHECK (length(description) <= 2000), ADD CONSTRAINT operational_expense_end_valid CHECK (end_date IS NULL OR (frequency <> 'once' AND end_date >= expense_date));
+COMMENT ON TABLE public.operational_expenses IS 'Owner/shop-scoped unique and effective-dated recurring expenses for Home, separate from accounting and finalized payroll.';
+CREATE TABLE public.home_expense_settings (shop_id uuid PRIMARY KEY DEFAULT public.current_shop_id() REFERENCES public.shops(id), recurring_source text NOT NULL DEFAULT 'legacy' CHECK (recurring_source IN ('legacy','detailed')), updated_at timestamptz NOT NULL DEFAULT now());
+GRANT SELECT, INSERT, UPDATE ON public.home_expense_settings TO authenticated;
+GRANT ALL ON public.home_expense_settings TO service_role;
+ALTER TABLE public.home_expense_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY owner_read_home_expense_settings ON public.home_expense_settings FOR SELECT TO authenticated USING (public.has_shop_role(shop_id,'owner') OR public.has_shop_role(shop_id,'super_owner'));
+CREATE POLICY owner_insert_home_expense_settings ON public.home_expense_settings FOR INSERT TO authenticated WITH CHECK (public.has_shop_role(shop_id,'owner') OR public.has_shop_role(shop_id,'super_owner'));
+CREATE POLICY owner_update_home_expense_settings ON public.home_expense_settings FOR UPDATE TO authenticated USING (public.has_shop_role(shop_id,'owner') OR public.has_shop_role(shop_id,'super_owner')) WITH CHECK (public.has_shop_role(shop_id,'owner') OR public.has_shop_role(shop_id,'super_owner'));
+COMMENT ON TABLE public.home_expense_settings IS 'Explicit Home recurring expense source; never changes accounting configuration or finalized payroll.';

@@ -1,0 +1,1 @@
+ALTER TABLE public.clients ALTER COLUMN referral_slug DROP NOT NULL;

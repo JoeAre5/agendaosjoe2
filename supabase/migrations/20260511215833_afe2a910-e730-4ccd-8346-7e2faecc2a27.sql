@@ -1,0 +1,1 @@
+ALTER VIEW public.referral_leaderboard SET (security_invoker = true);

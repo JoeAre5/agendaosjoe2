@@ -1,0 +1,129 @@
+# Charlie's Barbershop — Full Business Reference
+
+> The highest-rated barbershop in Camuy, Puerto Rico. 5.0 stars on Google Reviews.
+> More than haircuts. An experience.
+
+---
+
+## Business Overview
+
+Charlie's Barbershop is a premium barbershop serving Camuy, Puerto Rico and surrounding areas. Known for exceptional service, a clean and welcoming environment, and talented barbers. We hold a perfect 5.0-star rating on Google Reviews.
+
+**Legal Entity:** Charlie's Barbershop
+**Location:** PR-2 Km 93.3, Bo. Membrillo, Camuy, PR 00627
+**Operating Hours:** Tuesday–Saturday, 9:00 AM – 5:00 PM
+**Closed:** Sundays & Mondays
+
+---
+
+## The Team
+
+### Charlie — Owner & Barber
+Charlie is the founder and owner of Charlie's Barbershop. With years of experience, he leads the team and sets the standard for quality and service.
+
+### Hector — Barber
+Hector is a skilled barber known for precision cuts and attention to detail.
+
+### Joseph — Barber
+Joseph brings creativity and expertise to every client interaction.
+
+---
+
+## Complete Service Menu
+
+### Haircuts (Cortes)
+| Service | Price | Duration |
+|---------|-------|----------|
+| Kids Haircut (Corte de Niños) | $20+ | 30 min |
+| Haircut (Corte) | $25+ | 30 min |
+| Haircut + Facial (Corte + Facial) | $50+ | 60 min |
+| Haircut + White Hair Coverage (Corte + Cobertura de Canas) | $60 | 60 min |
+
+### Beard (Barba)
+| Service | Price | Duration |
+|---------|-------|----------|
+| Beard + Hot Towel (Barba + Toalla Caliente) | $20+ | 30 min |
+| Beard + White Hair Coverage (Barba + Cobertura de Canas) | $50 | 45 min |
+
+### Experiences (Experiencias)
+| Service | Price | Duration |
+|---------|-------|----------|
+| The Experience (La Experiencia) | $90+ | 90 min |
+| The Experience + White Hair Coverage | $150+ | 120 min |
+
+*Note: Prices may vary by barber and specific service requirements.*
+
+---
+
+## Customer Reviews
+
+**John Caban** ★★★★★
+"Great service, excellent employees and work environment."
+
+**Chrissie Roberts** ★★★★★
+"These people are talented! They're kind and friendly. He cut my husband's hair so nice and fresh but so fast. We had our 3 year old daughter and we hardly had to wait. Clean and nice inside also. Super professional."
+
+**Keyla Ortega** ★★★★★
+"Excellent service. My son loves getting his hair cut with Charlie."
+
+---
+
+## Frequently Asked Questions
+
+**Q: Do I need an appointment?**
+A: We accept both appointments and walk-ins. To guarantee your spot, we recommend booking online at charliesbarbershop.co/citas.
+
+**Q: What payment methods do you accept?**
+A: We accept cash, credit/debit cards, ATH Móvil, and PayPal.
+
+**Q: Where are you located?**
+A: We're at PR-2 Km 93.3, Bo. Membrillo, Camuy, PR 00627.
+
+**Q: What are your hours?**
+A: Tuesday to Saturday from 9:00 AM to 5:00 PM. We are closed on Sundays and Mondays.
+
+**Q: How much does a haircut cost at Charlie's Barbershop?**
+A: Adult haircuts start at $25 and kids haircuts start at $20. Beard grooming starts at $20. Full experience packages range from $90 to $150+. Prices may vary by barber and service.
+
+**Q: How long does a haircut take at Charlie's Barbershop?**
+A: A standard haircut takes about 30 minutes. Beard grooming runs 30 to 45 minutes. The full Experience package takes 90 to 120 minutes depending on add-ons.
+
+**Q: Do you serve customers from Hatillo, Quebradillas, Isabela, or Arecibo?**
+A: Yes. We are located on PR-2 in Camuy, which is a short drive from Hatillo, Quebradillas, Isabela, Arecibo, and other towns in northwest Puerto Rico.
+
+**Q: What makes Charlie's Barbershop different from other barbershops in Camuy?**
+A: We hold a 5.0-star rating on Google with 250+ reviews. Beyond basic cuts, we offer premium experiences including facials, hot towel treatments, and white hair coverage. Every service is performed by skilled barbers in a clean, professional environment.
+
+**Q: Do you offer haircuts for kids?**
+A: Yes. Kids haircuts start at $20 and take about 30 minutes. Walk-ins are welcome, but we recommend booking online to guarantee your spot.
+
+**Q: What is The Experience at Charlie's Barbershop?**
+A: The Experience is our signature premium service that includes a haircut, facial, and beard grooming in one 90-minute session starting at $90. We also offer it with white hair coverage starting at $150 for a 120-minute session.
+
+---
+
+## Contact & Social
+
+- **Website:** https://charliesbarbershop.co
+- **Instagram:** https://www.instagram.com/charliesbarbershop.co
+- **Book Online:** https://charliesbarbershop.co/citas
+- **Contact Page:** https://charliesbarbershop.co/contacto
+- **Join Our Team:** https://charliesbarbershop.co/unete
+
+---
+
+## Site Map
+
+- `/` — Home page
+- `/citas` — Book an appointment
+- `/titulares` — Headlines / Blog
+- `/unete` — Join our team (careers)
+- `/contacto` — Contact us
+- `/privacidad` — Privacy policy
+- `/terminos` — Terms of service
+
+---
+
+## Language Support
+
+The website is available in both English and Spanish (Español). Content is dynamically served based on user preference.

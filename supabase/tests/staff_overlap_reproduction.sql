@@ -1,0 +1,24 @@
+INSERT INTO user_roles VALUES ('00000000-0000-0000-0000-000000000001','owner'),('00000000-0000-0000-0000-000000000002','barber'),('00000000-0000-0000-0000-000000000003','client');
+INSERT INTO barbers VALUES ('10000000-0000-0000-0000-000000000000',null);
+INSERT INTO appointments(acuity_id,barber_id,starts_at,ends_at) VALUES (1,'10000000-0000-0000-0000-000000000000','2026-11-07T10:00:00-04:00','2026-11-07T11:00:00-04:00');
+SELECT set_config('test.user_id','00000000-0000-0000-0000-000000000001',false);
+SET ROLE authenticated;
+SELECT staff_preauthorize_overlap(2,'owner test');
+INSERT INTO appointments(acuity_id,barber_id,starts_at,ends_at) VALUES (2,'10000000-0000-0000-0000-000000000000','2026-11-07T10:00:00-04:00','2026-11-07T10:30:00-04:00');
+SELECT set_config('test.user_id','00000000-0000-0000-0000-000000000002',false);
+SELECT staff_preauthorize_overlap(3,'barber test');
+INSERT INTO appointments(acuity_id,barber_id,starts_at,ends_at) VALUES (3,'10000000-0000-0000-0000-000000000000','2026-11-07T10:15:00-04:00','2026-11-07T10:45:00-04:00');
+RESET ROLE;
+DO $$ BEGIN IF (SELECT count(*) FROM appointments) <> 3 THEN RAISE EXCEPTION 'missing staff appointments'; END IF; END $$;
+SELECT 'PASS: owner and barber overrides stored and read back';
+SELECT set_config('test.user_id','00000000-0000-0000-0000-000000000003',false);
+SET ROLE authenticated;
+DO $$ BEGIN BEGIN PERFORM staff_preauthorize_overlap(4,'client attempt'); RAISE EXCEPTION 'client allowed'; EXCEPTION WHEN raise_exception THEN IF SQLERRM='client allowed' THEN RAISE; END IF; END; END $$;
+RESET ROLE;
+SELECT 'PASS: client RPC denied';
+-- Sole staff-exempt interval, beyond the original appointment.
+SELECT set_config('test.user_id','00000000-0000-0000-0000-000000000001',false);
+SELECT staff_preauthorize_overlap(5,'override');
+INSERT INTO appointments(acuity_id,barber_id,starts_at,ends_at) VALUES (5,'10000000-0000-0000-0000-000000000000','2026-11-07T11:00:00-04:00','2026-11-07T12:00:00-04:00');
+INSERT INTO booking_drafts(id) VALUES ('20000000-0000-0000-0000-000000000000');
+SELECT acquire_booking_hold('20000000-0000-0000-0000-000000000000','10000000-0000-0000-0000-000000000000','2026-11-07T11:15:00-04:00','2026-11-07T11:45:00-04:00',30)->>'success' AS client_hold_over_exempt;

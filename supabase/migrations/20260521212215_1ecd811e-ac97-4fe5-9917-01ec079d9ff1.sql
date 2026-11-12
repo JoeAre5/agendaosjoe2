@@ -1,0 +1,1 @@
+ALTER VIEW public.v_referral_attributions SET (security_invoker = true);

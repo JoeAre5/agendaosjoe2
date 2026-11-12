@@ -1,0 +1,160 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791505191324,
+      "tag": "0000_protect_points_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791659263501,
+      "tag": "0001_acuity_operator_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791903735623,
+      "tag": "0002_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792118236745,
+      "tag": "0003_index_appointments_client_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792771393881,
+      "tag": "0004_record_additional_stripe_appointment_payment",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793115789418,
+      "tag": "0005_appointment_itemized_edit_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793626016730,
+      "tag": "0006_review_prompt_tracking",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793980376617,
+      "tag": "0007_create_operational_expenses",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793982034269,
+      "tag": "0008_extend_operating_expense_frequencies",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793982169076,
+      "tag": "0009_scope_home_expense_context",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793985378943,
+      "tag": "0010_entered_operating_costs_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793995709261,
+      "tag": "0011_staff_birthday_protocol",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793995824881,
+      "tag": "0012_retire_birthday_voucher_application",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794022492400,
+      "tag": "0013_retention_outreach_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794022763237,
+      "tag": "0014_outreach_access_null_safe",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794029414305,
+      "tag": "0015_duplicate_groups_by_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794071297081,
+      "tag": "0016_booking_draft_holds",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794090737453,
+      "tag": "0017_staff_overlap_client_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794092387075,
+      "tag": "0018_allow_authorized_staff_exact_overlap",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794218798828,
+      "tag": "0019_client_duplicate_review_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794223742936,
+      "tag": "0020_staff_cancel_paid_appointment",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794424252241,
+      "tag": "0021_staff_record_created_appointment",
+      "breakpoints": true
+    }
+  ]
+}

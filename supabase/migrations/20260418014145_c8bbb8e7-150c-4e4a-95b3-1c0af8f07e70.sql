@@ -1,0 +1,1 @@
+ALTER VIEW public.product_sales SET (security_invoker = true);

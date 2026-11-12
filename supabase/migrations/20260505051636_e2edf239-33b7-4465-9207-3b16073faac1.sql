@@ -1,0 +1,1 @@
+UPDATE public.launch_checklist SET status='done', confirmed_at=now(), confirmed_by_note='Verified by Charlie' WHERE id='6e7a7cba-d1c3-4c9f-860a-4e1f8ab61d6b';

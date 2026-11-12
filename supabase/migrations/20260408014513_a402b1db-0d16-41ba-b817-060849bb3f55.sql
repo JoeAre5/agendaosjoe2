@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS block_times_acuity_block_id_unique ON public.block_times (acuity_block_id) WHERE acuity_block_id IS NOT NULL;

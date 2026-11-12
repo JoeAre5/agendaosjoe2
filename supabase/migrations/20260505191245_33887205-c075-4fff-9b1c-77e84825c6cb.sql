@@ -1,0 +1,3 @@
+INSERT INTO public.launch_checklist (id, category, title, description, status, weight, sort_order, confirmed_at, confirmed_by_note)
+VALUES ('1ef2e118-d2aa-4550-b9dc-0bc4d6c431dc', 'public_site', 'Change Font', 'Migración tipográfica global Inter → Montserrat.', 'done', 1, 145, now(), 'Migración global Inter → Montserrat completada')
+ON CONFLICT (id) DO UPDATE SET status='done', confirmed_at=now(), confirmed_by_note=EXCLUDED.confirmed_by_note, updated_at=now();

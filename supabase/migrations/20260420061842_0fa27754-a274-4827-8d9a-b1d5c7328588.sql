@@ -1,0 +1,1 @@
+ALTER TABLE public.booking_drafts ADD COLUMN IF NOT EXISTS ath_auth_token TEXT;

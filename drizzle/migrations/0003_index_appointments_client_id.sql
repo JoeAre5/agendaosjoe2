@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_appointments_client_id ON public.appointments (client_id);

@@ -1,0 +1,10 @@
+CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+CREATE SCHEMA auth;
+CREATE TABLE cur(role text);
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$select '00000000-0000-0000-0000-000000000001'::uuid$$;
+CREATE FUNCTION public.is_owner() RETURNS bool LANGUAGE sql AS $$select exists(select 1 from cur where role='owner')$$;
+CREATE FUNCTION public.is_super_admin() RETURNS bool LANGUAGE sql AS $$select false$$;
+CREATE FUNCTION public.is_barber() RETURNS bool LANGUAGE sql AS $$select exists(select 1 from cur where role='barber')$$;
+CREATE TABLE public.appointments(id uuid primary key, status text, paid bool, cancelled_at timestamptz, cancelled_by_role text, refund_status text, amount_paid_cents int, acuity_id bigint, starts_at timestamptz);
+CREATE TABLE public.audit_log(user_id uuid, action text, entity_type text, entity_id uuid, metadata jsonb);
+INSERT INTO appointments VALUES ('00000000-0000-0000-0000-0000000000a1','scheduled',true,null,null,null,2500,1,now());

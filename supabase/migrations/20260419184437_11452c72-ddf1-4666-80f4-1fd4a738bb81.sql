@@ -1,0 +1,2 @@
+DELETE FROM public.suppressed_emails WHERE email = 'charliebarberopr@gmail.com' AND reason = 'unsubscribe';
+UPDATE public.email_unsubscribe_tokens SET used_at = NULL WHERE email = 'charliebarberopr@gmail.com';

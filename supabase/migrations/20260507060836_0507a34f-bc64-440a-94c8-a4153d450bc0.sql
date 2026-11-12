@@ -1,0 +1,1 @@
+UPDATE public.launch_checklist SET status = 'done', updated_at = now() WHERE id = '0229e1ad-4229-4616-bb72-047ff54bdaaf';

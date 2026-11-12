@@ -1,0 +1,1 @@
+ALTER TABLE public.services DROP CONSTRAINT IF EXISTS services_acuity_type_id_key;

@@ -1,0 +1,39 @@
+DROP VIEW IF EXISTS public.product_sales;
+
+CREATE VIEW public.product_sales AS
+SELECT
+  ti.id              AS item_id,
+  ti.transaction_id,
+  t.created_at,
+  t.barber_id,
+  b.name             AS barber_name,
+  t.client_id,
+  t.payment_method,
+  ti.item_id         AS product_id,
+  ti.name            AS product_name,
+  ti.quantity,
+  ti.unit_price_cents,
+  ti.total_cents     AS revenue_cents,
+  COALESCE(p.cost_cents, 0) * ti.quantity AS cost_cents,
+  CASE
+    WHEN COALESCE(p.eligible_for_commission, true) = false THEN 0
+    WHEN COALESCE(t.source, 'pos') = 'public_booking' THEN 0
+    ELSE round(ti.total_cents::numeric * COALESCE(p.commission_rate, 0::numeric) / 100::numeric)::integer
+  END AS commission_cents,
+  ((ti.total_cents - COALESCE(p.cost_cents, 0) * ti.quantity)::numeric -
+    CASE
+      WHEN COALESCE(p.eligible_for_commission, true) = false THEN 0::numeric
+      WHEN COALESCE(t.source, 'pos') = 'public_booking' THEN 0::numeric
+      ELSE round(ti.total_cents::numeric * COALESCE(p.commission_rate, 0::numeric) / 100::numeric)
+    END)::integer AS profit_cents,
+  COALESCE(p.eligible_for_commission, true) AS eligible_for_commission,
+  COALESCE(t.source, 'pos') AS source
+FROM public.transaction_items ti
+JOIN public.transactions t ON t.id = ti.transaction_id
+LEFT JOIN public.products p ON p.id = ti.item_id
+LEFT JOIN public.barbers b ON b.id = t.barber_id
+WHERE ti.item_type = 'product'
+  AND t.status = 'completed';
+
+ALTER VIEW public.product_sales SET (security_invoker = true);
+GRANT SELECT ON public.product_sales TO authenticated;

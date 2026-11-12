@@ -1,0 +1,825 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.calendar-appointment-card {
+  background: color-mix(in srgb, var(--calendar-appointment-bg, var(--calendar-appointment-fallback)) 50%, transparent);
+  border-left: 3px solid var(--calendar-appointment-stripe);
+  box-shadow: var(--card-shadow);
+  color: var(--calendar-appointment-fg);
+}
+.dark .calendar-appointment-card {
+  --calendar-appointment-fg: #ffffff;
+  --calendar-appointment-muted: #ffffff;
+  --calendar-appointment-tertiary: #ffffff;
+}
+.calendar-appointment-card:hover {
+  background: color-mix(in srgb, var(--calendar-appointment-bg, var(--calendar-appointment-fallback)) 50%, transparent);
+  color: var(--calendar-appointment-fg);
+}
+.calendar-appointment-card [role="img"] {
+  color: var(--calendar-appointment-fg);
+}
+
+.staff-overlap-backdrop {
+  background: hsl(var(--staff-confirm-backdrop));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.staff-overlap-card {
+  background: hsl(var(--staff-confirm-surface));
+  color: hsl(var(--staff-confirm-fg));
+  border-radius: 28px;
+  box-shadow: var(--staff-confirm-shadow);
+}
+.staff-overlap-pill {
+  background: hsl(var(--staff-confirm-accent) / 0.15);
+  color: hsl(var(--staff-confirm-accent));
+}
+.staff-overlap-warning { color: hsl(var(--staff-confirm-warning)); }
+.staff-overlap-muted { color: hsl(var(--staff-confirm-fg) / 0.65); }
+.staff-overlap-summary > * { border-color: hsl(var(--staff-confirm-fg) / 0.1); }
+.staff-overlap-confirm, .staff-overlap-confirm:hover {
+  background: hsl(var(--staff-confirm-fg));
+  color: hsl(var(--staff-confirm-surface));
+}
+.staff-overlap-cancel, .staff-overlap-cancel:hover {
+  background: hsl(var(--staff-confirm-surface));
+  color: hsl(var(--staff-confirm-fg));
+  border-color: hsl(var(--staff-confirm-fg) / 0.16);
+}
+
+@layer base {
+  :root {
+    /* AgendaOS Light Mode — pure white base; beige reserved for hero cards only */
+    --bg-base: #ffffff;
+    --bg-surface: #ffffff;
+    --bg-surface-2: #f5f5f5;
+    --staff-confirm-surface: 0 0% 100%;
+    --staff-confirm-fg: 0 0% 6.7%;
+    --staff-confirm-accent: 30 25% 50%;
+    --staff-confirm-warning: 0 72% 42%;
+    --staff-confirm-backdrop: 0 0% 0% / 0.25;
+    --staff-confirm-shadow: 0 24px 80px hsl(0 0% 0% / 0.25), 0 4px 16px hsl(0 0% 0% / 0.1);
+    --calendar-appointment-fallback: #c9a882;
+    --calendar-appointment-stripe: hsl(0 0% 100%);
+    --calendar-appointment-fg: #111111;
+    --calendar-appointment-muted: rgba(17,17,17,.80);
+    --calendar-appointment-tertiary: rgba(17,17,17,.72);
+    --calendar-appointment-paid: #14532d;
+    --calendar-appointment-partial: #593b00;
+    --accent: #111111;
+    --accent-color: #111111;
+    --accent-dim: rgba(0,0,0,.04);
+    --text-primary: #111111;
+    --text-secondary: rgba(17,17,17,.70);
+    --text-tertiary: rgba(17,17,17,.58);
+    --border: rgba(0,0,0,.08);
+    --border-strong: rgba(0,0,0,0.18);
+    --input-hint: rgba(0,0,0,0.25);
+    /* Light mode nav: inverted — bg matches white cards, pill uses former bg color */
+    --nav-pill-bg: #F4F5F2;
+    --nav-pill-shadow: none;
+    --nav-pill-filter-shadow: none;
+    --nav-pill-border: 0.5px solid rgba(0,0,0,0.056);
+    --nav-border-color: rgba(0,0,0,0.08);
+    --nav-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    --nav-bg: #ffffff;
+    --nav-accent: #000000;
+    --nav-icon-inactive: #B0B0B0;
+    --green: #1a6e3f;
+    --yellow: #7a5200;
+    --client-vip-crown: #b77900;
+    --client-frequent-crown: #080808;
+    --client-frequent-crown-edge: #080808;
+    --red: #b91c1c;
+    --pending-badge-bg: #ef4444;
+    --pending-badge-fg: #ffffff;
+    --grid-line: rgba(0,0,0,0.06);
+    --inactive-hour: rgba(0,0,0,0.03);
+    --cta-bg: #111111;
+    --cta-fg: #ffffff;
+    --card-border: 0.5px solid rgba(0,0,0,0.08);
+    --card-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    /* Apple-style hairline (iOS Settings / Apple Store).
+       Cool gray, very low contrast — sub-pixel on retina. */
+    --divider: rgba(60, 60, 67, 0.18);
+    /* Whisper-thin hairline used inside cards (action rows, summary rows).
+       Lower opacity than --divider so in-card separators feel softer. */
+    --divider-hairline: rgba(60, 60, 67, 0.12);
+    --gradient-accent: #a08060;
+    --greeting-color: #ceb79e;
+
+    /* ============ ICON STROKE TOKENS (Lucide global) ============
+       Default = 1.5 (refined). Bold = 2.5 (emphasis). Extrabold = 3 (confirmation). */
+    --icon-stroke: 1.5;
+    --icon-stroke-bold: 2.5;
+    --icon-stroke-extrabold: 3;
+
+    /* ElevenLabs palette additions (official tokens) */
+    --eleven-beige: #F4F5F2;       /* hero card background, light mode */
+    --eleven-gray: #6D6D6D;        /* hero card body text, light mode */
+    --eleven-border: #EAE9E8;      /* hero card hairline border */
+
+    /* Portal hero card — ElevenLabs: beige bg, BLACK titles, gray subtitles */
+    --portal-hero-bg: var(--eleven-beige);
+    --portal-hero-bg-2: var(--eleven-beige);
+    --portal-hero-fg: #000000;                 /* titles / primary */
+    --portal-hero-fg-muted: var(--eleven-gray); /* subtitles / micro / paragraph */
+
+    /* shadcn compat (mapped to AgendaOS tokens) */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 6.7%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 6.7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 6.7%;
+    --primary: 0 0% 6.7%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 6.7%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 6.7% / 0.55;
+    --accent: 0 0% 6.7%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 0% / 0.08;
+    --input: 0 0% 0% / 0.08;
+    --ring: 0 0% 6.7%;
+    --radius: 0.75rem;
+
+    /* ============ RADIUS TOKENS (semantic — see tailwind.config.ts) ============
+       --radius-control : ALL clickable elements (buttons, toggles, segmented items, CTA rows) → 12px
+       --radius-input   : ALL form inputs (input, textarea, select, OTP cell)                  → 10px
+       --radius-pill    : Non-clickable pills (chips, badges, status indicators)               → 9999px
+       Surfaces (cards/modals/sheets/drawers) keep their existing rounded-xl/2xl.
+
+       ── INTENTIONAL EXCEPTIONS (brand-driven pill CTAs, keep rounded-full) ──
+       Pill-shaped CTAs are an editorial brand variant on these surfaces ONLY:
+         • Public site pages: Home, Servicios*, HeadlinePost, Headlines, StickyBookingBar
+         • Public site forms: ContactForm, NewsletterForm, RecruitmentForm
+         • Broadcast tools : BroadcastComposer, BroadcastAssetStudio, BroadcastModal,
+                             PendingAllocationModal
+       Do NOT normalize these to rounded-control. Everywhere else, clickable = 12px. */
+    --radius-control: 12px;
+    --radius-input: 10px;
+    --radius-pill: 9999px;
+
+    /* ============ APP PAGE HEADER TOKENS ============
+       Used by every subpage header (with back arrow) so the visual gap
+       between the status bar and the page title matches the Panel/AdminHeader
+       title position. AdminHeader: pt-14 (56) + logo row (~22) + mb-5 (20) ≈ 98px.
+       Subpages without the logo row use --header-pad-top to match. */
+    --header-pad-top: 98px;
+    --header-pad-bottom: 12px;
+    --header-pad-x: 16px;
+    --header-title-size: 24px;
+    --header-title-weight: 900;
+    --header-title-tracking: -0.5px;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 6.7%;
+    --sidebar-primary: 27 34% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 96.1%;
+    --sidebar-accent-foreground: 0 0% 6.7%;
+    --sidebar-border: 0 0% 0% / 0.08;
+    --sidebar-ring: 27 34% 40%;
+
+    --lang-popup-bg: #FFFFFF;
+    --lang-popup-border: rgba(0,0,0,0.08);
+    --lang-popup-fg: #111111;
+
+    /* Switch OFF track — must contrast against white thumb */
+    --switch-off: rgba(0,0,0,0.22);
+  }
+
+  .dark {
+    /* AgendaOS Dark Mode */
+    --bg-base: #000000;
+    --bg-surface: #0F1011;
+    --bg-surface-2: #1B1B1E;
+    --accent: #ceb79e;
+    --accent-color: #ceb79e;
+    --accent-dim: rgba(206,183,158,.12);
+    --text-primary: #ffffff;
+    --text-secondary: #b5b5ba;
+    --text-tertiary: #8e8e93;
+    --border: #1B1B1E;
+    --border-strong: rgba(255,255,255,0.28);
+    --input-hint: rgba(255,255,255,0.32);
+    --nav-pill-bg: #0F1011;
+    --nav-pill-shadow: none;
+    --nav-pill-filter-shadow: none;
+    --nav-pill-border: 0.5px solid #1B1B1E;
+    --nav-border-color: #1B1B1E;
+    --nav-shadow: none;
+    --nav-bg: rgba(0,0,0,0.85);
+    --nav-accent: #ceb79e;
+    --nav-icon-inactive: #ffffff;
+    --green: #7ec8a4;
+    --yellow: #fbbf24;
+    --client-vip-crown: #f59e0b;
+    --client-frequent-crown: #080808;
+    --client-frequent-crown-edge: #a4a4aa;
+    --red: #f87171;
+    --grid-line: rgba(255,255,255,0.12);
+    --inactive-hour: rgba(255,255,255,0.05);
+    --cta-bg: #ceb79e;
+    --cta-fg: #000000;
+    --card-border: 0.5px solid hsl(0 0% 100% / 0.12);
+    --card-shadow: 0 10px 28px hsl(0 0% 0% / 0.36), inset 0 1px 0 hsl(0 0% 100% / 0.04);
+    /* Apple-style hairline in dark mode — soft white, low alpha */
+    --divider: rgba(255, 255, 255, 0.10);
+    --divider-hairline: rgba(255, 255, 255, 0.09);
+    --gradient-accent: #ceb79e;
+    --greeting-color: #ceb79e;
+
+    /* ElevenLabs tokens still defined in dark mode for consistency */
+    --eleven-beige: #F4F5F2;
+    --eleven-gray: #6D6D6D;
+    --eleven-border: #EAE9E8;
+
+    /* Portal hero card — Linear-style fade to black */
+    --portal-hero-bg: #1f1f22;        /* Linear neutral start */
+    --portal-hero-bg-2: #0a0a0b;      /* mid */
+    --portal-hero-fg: #ffffff;
+    --portal-hero-fg-muted: rgba(255,255,255,0.62);
+    --portal-hero-border: rgba(255,255,255,0.08);
+
+    /* shadcn compat */
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 30 30% 72%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 17%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 11%;
+    --muted-foreground: 0 0% 56%;
+    --accent: 30 30% 72%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 69% 71%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 100% / 0.12;
+    --input: 0 0% 100% / 0.12;
+    --ring: 30 30% 72%;
+
+    --sidebar-background: 0 0% 0%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 30 30% 72%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 17%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 100% / 0.12;
+    --sidebar-ring: 30 30% 72%;
+
+    --lang-popup-bg: #1c1c1e;
+    --lang-popup-border: rgba(255,255,255,0.12);
+    --lang-popup-fg: #E8E2DA;
+
+    /* Switch OFF track — visible gray track distinct from white thumb */
+    --switch-off: rgba(255,255,255,0.30);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-family: 'Montserrat', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    min-height: 100vh;
+    min-height: 100dvh;
+    overscroll-behavior: none;
+  }
+
+  /* Prevent iOS auto-zoom on input focus */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* ============ GLOBAL LUCIDE ICON STROKE ============
+     Lucide renders <svg class="lucide ..."> with stroke-width as an attribute.
+     This rule overrides that attribute everywhere unless an explicit
+     `strokeWidth` prop is passed (inline style wins over attribute via CSS).
+     For per-icon overrides, set className with a stroke utility, or pass
+     strokeWidth={var(--icon-stroke-bold|--icon-stroke-extrabold)} explicitly. */
+  svg.lucide {
+    stroke-width: var(--icon-stroke);
+  }
+  svg.lucide.icon-bold {
+    stroke-width: var(--icon-stroke-bold);
+  }
+  svg.lucide.icon-extrabold {
+    stroke-width: var(--icon-stroke-extrabold);
+  }
+}
+
+/* ============================================================
+   DIVIDER CONTRACT — DO NOT DEVIATE
+   ============================================================
+   There are exactly TWO divider styles in this app:
+
+   1. SECTION DIVIDER — between sections / over-and-under date pickers.
+      Use --divider (slightly stronger).
+        className="app-divider-b"  → bottom divider
+        className="app-divider-t"  → top divider
+      Or the legacy inline style (still normalized):
+        style={{ borderTop: "1px solid var(--divider)" }}
+        style={{ borderBottom: "1px solid var(--divider)" }}
+
+   2. IN-CARD HAIRLINE — between rows INSIDE a card (settings rows,
+      action rows, summary totals). Use --divider-hairline (softer).
+        className="divider-hairline"   → top hairline
+        className="divider-hairline-b" → bottom hairline
+      Insets are baked in (16px L/R) — do NOT add mx-4.
+
+   FORBIDDEN (do not introduce these — they break the system):
+     • 0.5px or 2px dividers
+     • borderTop/Bottom with var(--border) for separators
+     • A full `border: 1px solid var(--divider)` shorthand
+       (that paints all 4 sides — use a card outline class instead)
+     • Per-component left/right padding to "fake" insets
+       (the global rule below already insets 16px on both sides)
+
+   The selectors below normalize EVERY conforming divider to:
+     - true 1px hairline
+     - identical 16px inset on the left AND right
+     - the same look on every page (date pickers, cards, lists, modals)
+      - ONE side only: bottom dividers never create top lines, and top
+        dividers never create bottom lines
+
+   If a divider looks wrong somewhere, the fix is in the COMPONENT
+   (it isn't following the contract), NOT in this rule.
+   ============================================================ */
+.app-divider-b,
+[style*="border-bottom: 1px solid var(--divider)"] {
+  border-bottom: 1px solid var(--divider) !important;
+  border-image: linear-gradient(
+    to right,
+    transparent 0,
+    transparent 16px,
+    var(--divider) 16px,
+    var(--divider) calc(100% - 16px),
+    transparent calc(100% - 16px),
+    transparent 100%
+  ) 1 !important;
+  border-image-slice: 1 !important;
+  border-image-width: 0 0 1px 0 !important;
+}
+
+.app-divider-t,
+[style*="border-top: 1px solid var(--divider)"] {
+  border-top: 1px solid var(--divider) !important;
+  border-image: linear-gradient(
+    to right,
+    transparent 0,
+    transparent 16px,
+    var(--divider) 16px,
+    var(--divider) calc(100% - 16px),
+    transparent calc(100% - 16px),
+    transparent 100%
+  ) 1 !important;
+  border-image-slice: 1 !important;
+  border-image-width: 1px 0 0 0 !important;
+}
+
+/* ============================================================
+   IN-CARD HAIRLINE — for action rows / summary rows inside cards.
+   Softer than .app-divider-* (uses --divider-hairline) and has the
+   same 16px inset baked in, so consumers DON'T need mx-4.
+   Usage: <div className="divider-hairline" /> as a 1px row,
+   or add the class to a row to get a top hairline above it.
+   ============================================================ */
+.divider-hairline {
+  border-top: 1px solid var(--divider-hairline);
+  border-image: linear-gradient(
+    to right,
+    transparent 0,
+    transparent 16px,
+    var(--divider-hairline) 16px,
+    var(--divider-hairline) calc(100% - 16px),
+    transparent calc(100% - 16px),
+    transparent 100%
+  ) 1;
+  border-image-slice: 1;
+  border-image-width: 1px 0 0 0;
+}
+.divider-hairline-b {
+  border-bottom: 1px solid var(--divider-hairline);
+  border-image: linear-gradient(
+    to right,
+    transparent 0,
+    transparent 16px,
+    var(--divider-hairline) 16px,
+    var(--divider-hairline) calc(100% - 16px),
+    transparent calc(100% - 16px),
+    transparent 100%
+  ) 1;
+  border-image-slice: 1;
+  border-image-width: 0 0 1px 0;
+}
+
+@layer components {
+  .login-input::placeholder {
+    color: var(--input-hint);
+    opacity: 1;
+  }
+
+  /* Global app subpage header — keeps the title at the same Y as the
+     AdminHeader/Panel title so the gap between the status bar and the
+     page title is uniform across every screen. */
+  .app-page-header {
+    padding-top: var(--header-pad-top);
+    padding-bottom: var(--header-pad-bottom);
+    padding-left: var(--header-pad-x);
+    padding-right: var(--header-pad-x);
+    background: var(--bg-base);
+  }
+  .app-page-title {
+    font-size: var(--header-title-size);
+    font-weight: var(--header-title-weight);
+    letter-spacing: var(--header-title-tracking);
+    color: var(--text-primary);
+    line-height: 1.1;
+  }
+
+  .card-elevated {
+    background: var(--bg-surface);
+    border: var(--card-border);
+    box-shadow: var(--card-shadow);
+  }
+  .dark .card-elevated {
+    position: relative;
+    background: #0F1011;
+    border: 0;
+    box-shadow: none;
+  }
+  .dark .card-elevated::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 0.5px;
+    background: linear-gradient(180deg, #1B1B1E 0%, #1B1B1E 35%, rgba(0,0,0,0) 55%);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /*
+   * Portal hero card.
+   * Light: ElevenLabs flat warm beige (#F4F4F1) with mid-gray text (#6D6D6D).
+   * Dark: Linear-style radial fade where the lower-right edge dissolves
+   * into pure black, matching the surrounding bg. Content stays fully
+   * legible thanks to a vertical readability gradient on top.
+   */
+  .card-portal-hero {
+    position: relative;
+    background:
+      radial-gradient(120% 90% at 0% 0%, var(--portal-hero-bg) 0%, var(--portal-hero-bg) 35%, var(--bg-base) 75%, var(--bg-base) 100%);
+    color: var(--portal-hero-fg);
+    border: 0;
+    box-shadow: none;
+  }
+  /* Light-mode fading hairline border — mirrors dark mode treatment */
+  .card-portal-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 0.5px;
+    background: linear-gradient(180deg, var(--eleven-border) 0%, var(--eleven-border) 35%, rgba(0,0,0,0) 55%);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
+  .dark .card-portal-hero {
+    position: relative;
+    background:
+      radial-gradient(120% 90% at 0% 0%, var(--portal-hero-bg) 0%, var(--portal-hero-bg-2) 35%, var(--bg-base) 65%, var(--bg-base) 100%);
+    color: var(--portal-hero-fg);
+    border: 0;
+    box-shadow: none;
+  }
+  /* Hairline border that fades out before the midpoint so the bottom is borderless */
+  .dark .card-portal-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 0.5px;
+    background: linear-gradient(180deg, var(--portal-hero-border) 0%, var(--portal-hero-border) 35%, rgba(255,255,255,0) 55%);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
+  /* No bottom division on the last row inside any elevated card */
+  .card-elevated > *:last-child { border-bottom: 0 !important; }
+  .card-elevated > *:last-child > *:last-child { border-bottom: 0 !important; }
+
+  /* ============ BLOG CARD — fading hairline border ============
+     Same melt-into-background treatment as `.card-portal-hero`. The cover
+     icon block (CoverIcon) provides the radial color seed at top-left;
+     this class adds the fading top→transparent border around the whole card
+     and ensures the surface matches `--bg-surface` so the gradient flows. */
+  .card-blog {
+    position: relative;
+    background: var(--bg-surface);
+    border: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dark .card-blog { background: transparent; }
+  .card-blog::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 0.75px;
+    background: linear-gradient(180deg, var(--border-strong) 0%, var(--border-strong) 30%, rgba(0,0,0,0) 60%);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+    z-index: 2;
+    will-change: transform;
+  }
+  .card-blog:active::before,
+  .card-blog:focus::before,
+  .card-blog:hover::before { opacity: 1; }
+  .dark .card-blog::before {
+    background: linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.14) 30%, rgba(255,255,255,0) 60%);
+  }
+
+  /* Inside the hero card, semantic text tokens map to hero foreground so
+     existing components don't need per-element overrides. */
+  .card-portal-hero,
+  .card-portal-hero [style*="--text-primary"],
+  .card-portal-hero [style*="--text-secondary"],
+  .card-portal-hero [style*="--text-tertiary"] {
+    /* fallback: rely on cascade — see overrides below */
+  }
+  .card-portal-hero { --text-primary: var(--portal-hero-fg); --text-secondary: var(--portal-hero-fg-muted); --text-tertiary: var(--portal-hero-fg-muted); --divider: rgba(0,0,0,0.10); --accent-color: var(--portal-hero-fg-muted); }
+  .dark .card-portal-hero { --text-primary: #ffffff; --text-secondary: rgba(255,255,255,0.75); --text-tertiary: rgba(255,255,255,0.55); --divider: rgba(255,255,255,0.12); --accent-color: rgba(255,255,255,0.75); }
+
+  /* Hero card outline button — light: gray bg + black border/text; dark: black bg + accent border/text */
+  .btn-hero-outline {
+    background: var(--eleven-beige);
+    color: #000000;
+    border: 1px solid #000000;
+  }
+  .dark .btn-hero-outline {
+    background: var(--bg-base);
+    color: var(--accent-color);
+    border: 1px solid var(--accent-color);
+  }
+}
+
+/* Subtle shimmer for the BroadcastAssetStudio hero skeleton */
+@keyframes hero-skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.hero-skeleton-pulse {
+  animation: hero-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+/* ─── Blog (Headlines) ─────────────────────────────────────── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.blog-prose {
+  font-size: 17px;
+  line-height: 1.7;
+}
+.blog-prose > * + * { margin-top: 1.25em; }
+.blog-prose h2 {
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  margin-top: 2em;
+  margin-bottom: 0.5em;
+  color: var(--text-primary);
+}
+.blog-prose h3 {
+  font-size: clamp(18px, 2.4vw, 22px);
+  font-weight: 700;
+  margin-top: 1.6em;
+  margin-bottom: 0.4em;
+  color: var(--text-primary);
+}
+.blog-prose p { color: var(--text-primary); }
+.blog-prose a {
+  color: var(--accent-color);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.blog-prose strong { font-weight: 700; color: var(--text-primary); }
+.blog-prose ul, .blog-prose ol {
+  padding-left: 1.4em;
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+.blog-prose ul { list-style: disc; }
+.blog-prose ol { list-style: decimal; }
+.blog-prose li { margin: 0.4em 0; }
+.blog-prose li::marker { color: var(--accent-color); }
+.blog-prose blockquote {
+  border-left: 3px solid var(--accent-color);
+  padding-left: 1em;
+  margin-left: 0;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+.blog-prose code {
+  background: var(--bg-surface-2);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.blog-prose pre {
+  background: var(--bg-surface-2);
+  padding: 1em 1.2em;
+  border-radius: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--divider);
+}
+.blog-prose pre code { background: transparent; padding: 0; }
+.blog-prose img {
+  border-radius: 12px;
+  margin: 1.5em 0;
+}
+.blog-prose figure.blog-prose-figure {
+  margin: 1.75em 0;
+}
+.blog-prose figure.blog-prose-figure img {
+  margin: 0;
+  width: 100%;
+  display: block;
+}
+.blog-prose figure.blog-prose-figure figcaption {
+  margin-top: 0.5em;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  text-align: center;
+  font-style: italic;
+}
+.blog-prose hr {
+  border: none;
+  border-top: 1px solid var(--divider);
+  margin: 2em 0;
+}
+.blog-prose pre[data-language]::before {
+  content: attr(data-language);
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  margin-bottom: 0.5em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.blog-prose .blog-prose-heading {
+  scroll-margin-top: 80px;
+}
+
+/* ───── Tiptap composer (admin newsletter editor) ───── */
+.tiptap-composer { min-height: 240px; color: var(--text-primary); font-size: 15px; line-height: 1.6; }
+.tiptap-composer p { margin: 0 0 0.75em 0; }
+.tiptap-composer h2 { font-size: 1.4em; font-weight: 800; margin: 1em 0 0.4em 0; letter-spacing: -0.01em; }
+.tiptap-composer h3 { font-size: 1.15em; font-weight: 700; margin: 0.9em 0 0.3em 0; }
+.tiptap-composer ul, .tiptap-composer ol { margin: 0 0 0.75em 1.25em; padding: 0; }
+.tiptap-composer ul { list-style: disc; }
+.tiptap-composer ol { list-style: decimal; }
+.tiptap-composer li { margin: 0.2em 0; }
+.tiptap-composer li > p { margin: 0; }
+.tiptap-composer blockquote {
+  border-left: 3px solid var(--accent-color);
+  padding: 0.2em 0 0.2em 0.9em;
+  margin: 0 0 0.75em 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.tiptap-composer code {
+  background: var(--bg-base);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.tiptap-composer pre {
+  background: var(--bg-base);
+  padding: 0.8em 1em;
+  border-radius: 10px;
+  overflow-x: auto;
+  border: 1px solid var(--divider);
+  margin: 0 0 0.75em 0;
+}
+.tiptap-composer pre code { background: transparent; padding: 0; }
+.tiptap-composer hr {
+  border: none;
+  border-top: 1px solid var(--divider);
+  margin: 1.2em 0;
+}
+.tiptap-composer img { border-radius: 10px; margin: 0.8em 0; max-width: 100%; }
+.tiptap-composer a { color: var(--accent-color); text-decoration: underline; }
+.tiptap-composer p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--text-tertiary);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+.tiptap-composer .ProseMirror-focused { outline: none; }
+
+
+
+/* iMessage-style 3-dot typing indicator */
+@keyframes ai-typing-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: .35; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+.ai-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 18px;
+  border: 1px solid var(--divider);
+  background: transparent;
+}
+.ai-typing-dots span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--text-tertiary);
+  animation: ai-typing-dot 1.2s ease-in-out infinite;
+}
+.ai-typing-dots span:nth-child(2) { animation-delay: .15s; }
+.ai-typing-dots span:nth-child(3) { animation-delay: .3s; }
+
+/* ───── Filho hero CTA — ElevenLabs-style pill ─────
+   Neutral gray hairline + ambient shadow for the dark orb in both themes. */
+.filo-cta {
+  background: var(--bg-surface);
+  color: #1a1410;
+  border: 1px solid rgba(120, 120, 128, 0.22);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 1px 2px rgba(120, 120, 128, 0.08),
+    0 8px 24px -10px rgba(120, 120, 128, 0.24);
+  transition: box-shadow 200ms ease, transform 150ms ease, border-color 200ms ease;
+}
+.filo-cta:hover {
+  border-color: rgba(120, 120, 128, 0.34);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 1px 2px rgba(120, 120, 128, 0.10),
+    0 14px 32px -12px rgba(120, 120, 128, 0.32);
+}
+
+.dark .filo-cta {
+  background: var(--bg-surface);
+  color: #f5efe6;
+  border: 1px solid rgba(180, 180, 188, 0.22);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 12px 32px -10px rgba(0, 0, 0, 0.7),
+    0 0 24px -6px rgba(180, 180, 188, 0.18);
+}
+.dark .filo-cta:hover {
+  border-color: rgba(180, 180, 188, 0.36);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 16px 38px -10px rgba(0, 0, 0, 0.8),
+    0 0 32px -6px rgba(180, 180, 188, 0.32);
+}

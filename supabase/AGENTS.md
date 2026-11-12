@@ -1,0 +1,1 @@
+- Staff bookings save via `staff_record_created_appointment`. Why: cross-barber booking without widening RLS.

@@ -1,0 +1,1 @@
+ALTER TABLE public.booking_drafts ADD COLUMN IF NOT EXISTS stuck_alerted_at timestamptz;

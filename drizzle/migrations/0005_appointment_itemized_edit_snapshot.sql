@@ -1,0 +1,2 @@
+ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS edit_line_items jsonb;
+COMMENT ON COLUMN public.appointments.edit_line_items IS 'Itemized snapshot authored by staff edits: explicit service/add-on/product prices and durations. NULL means legacy Acuity pricing; sync must preserve locally itemized totals and duration.';

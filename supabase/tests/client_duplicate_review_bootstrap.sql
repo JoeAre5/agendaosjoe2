@@ -1,0 +1,23 @@
+-- Disposable PostgreSQL fixtures only, never the hosted app database.
+CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+CREATE SCHEMA auth;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('test.user_id',true),'')::uuid $$;
+CREATE TABLE auth.users(id uuid PRIMARY KEY, email text, email_confirmed_at timestamptz);
+CREATE TYPE public.app_role AS ENUM ('owner','barber','client');
+CREATE TABLE public.shops(id uuid PRIMARY KEY);
+CREATE TABLE public.shop_memberships(shop_id uuid, user_id uuid, role public.app_role);
+CREATE FUNCTION public.is_owner() RETURNS boolean LANGUAGE sql AS $$ SELECT EXISTS(SELECT 1 FROM public.shop_memberships WHERE user_id=auth.uid() AND role='owner') $$;
+CREATE FUNCTION public.is_super_admin() RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
+CREATE FUNCTION public.has_shop_role(_shop uuid,_role public.app_role) RETURNS boolean LANGUAGE sql AS $$ SELECT EXISTS(SELECT 1 FROM public.shop_memberships WHERE shop_id=_shop AND user_id=auth.uid() AND role=_role) $$;
+CREATE FUNCTION public.current_shop_id() RETURNS uuid LANGUAGE sql AS $$ SELECT shop_id FROM public.shop_memberships WHERE user_id=auth.uid() LIMIT 1 $$;
+CREATE FUNCTION public.normalize_email(text) RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT nullif(lower(trim($1)), '') $$;
+CREATE FUNCTION public.normalize_phone(text) RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT CASE WHEN length(regexp_replace($1,'[^0-9]','','g'))>=10 THEN right(regexp_replace($1,'[^0-9]','','g'),10) END $$;
+CREATE TABLE public.clients(id uuid PRIMARY KEY,shop_id uuid,first_name text,last_name text,email text,phone text,total_visits int,created_at timestamptz DEFAULT now(),auth_user_id uuid,account_verified boolean DEFAULT false,acuity_client_id int);
+CREATE TABLE public.appointments(id uuid PRIMARY KEY,client_id uuid REFERENCES public.clients(id) ON DELETE SET NULL,booked_for_member_id uuid,status text,price_cents int);
+CREATE TABLE public.transactions(id uuid PRIMARY KEY,client_id uuid REFERENCES public.clients(id) ON DELETE SET NULL,total_cents int);
+CREATE TABLE public.loyalty_points(client_id uuid REFERENCES public.clients(id) ON DELETE CASCADE,balance int);
+CREATE TABLE public.client_rewards_ledger(client_id uuid REFERENCES public.clients(id) ON DELETE CASCADE,points int);
+CREATE TABLE public.booking_drafts(id uuid PRIMARY KEY,client_id uuid);
+CREATE TABLE public.audit_log(user_id uuid,action text,entity_type text,entity_id uuid,metadata jsonb);
+CREATE FUNCTION public.merge_clients(uuid,uuid) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;
+GRANT USAGE ON SCHEMA public,auth TO authenticated,anon;

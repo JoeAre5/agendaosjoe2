@@ -1,0 +1,2 @@
+ALTER TABLE public.booking_drafts ADD COLUMN IF NOT EXISTS products jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE public.booking_drafts ADD COLUMN IF NOT EXISTS products_total_cents integer NOT NULL DEFAULT 0;

@@ -1,0 +1,29 @@
+@keyframes home-card-wiggle {
+  from { transform: rotate(-0.35deg); }
+  to { transform: rotate(0.35deg); }
+}
+.home-card-editing { animation: home-card-wiggle 180ms ease-in-out infinite alternate; transform-origin: center; }
+.home-card-item:nth-child(even) .home-card-editing { animation-direction: alternate-reverse; }
+.admin-home-no-selection,
+.admin-home-no-selection *,
+.home-card-drag-overlay { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+.admin-home-no-selection input,
+.admin-home-no-selection textarea { -webkit-user-select: text; user-select: text; }
+.home-card-item { position: relative; -webkit-touch-callout: none; }
+.home-card-item[data-dragging="true"] { opacity: 0.25; }
+.home-card-drag-overlay { cursor: grabbing; }
+.home-card-drag-overlay > * { margin-bottom: 0; }
+.home-card-item[data-dragging="true"] .home-card-editing { animation: none; }
+.home-card-drag-surface { position: absolute; inset: 0 0 16px; z-index: 1; touch-action: pan-y; cursor: grab; border-radius: 16px; }
+.home-card-drag-surface:active { cursor: grabbing; }
+.home-card-drag-surface:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+.home-card-move { position: absolute; top: -8px; right: -8px; z-index: 2; width: calc(36px / 1.6180); height: calc(36px / 1.6180); }
+.home-card-move svg,
+.home-card-toolbar-button svg { width: calc(16px / 1.6180); height: calc(16px / 1.6180); }
+.home-card-toolbar-button { height: calc(36px / 1.6180); padding: 0 calc(12px / 1.6180); gap: calc(8px / 1.6180); font-size: calc(14px / 1.6180); }
+.home-operational-details-button:hover { background: transparent; color: inherit; }
+.home-card-toolbar { background: var(--bg-base); border-bottom: 1px solid var(--border); }
+@media (prefers-reduced-motion: reduce) {
+  .home-card-editing { animation: none; }
+  .home-card-item { transition: none !important; }
+}

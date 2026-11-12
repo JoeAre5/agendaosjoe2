@@ -1,0 +1,15 @@
+CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+CREATE SCHEMA auth;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('test.user_id', true),'')::uuid $$;
+CREATE TYPE public.app_role AS ENUM ('super_owner','owner','manager','staff','barber','client');
+CREATE TABLE public.user_roles(user_id uuid,role public.app_role);
+CREATE FUNCTION public.has_role(_id uuid,_role public.app_role) RETURNS boolean LANGUAGE sql AS $$ SELECT EXISTS(SELECT 1 FROM public.user_roles WHERE user_id=_id AND role=_role) $$;
+CREATE FUNCTION public.is_owner() RETURNS boolean LANGUAGE sql AS $$ SELECT public.has_role(auth.uid(),'owner') $$;
+CREATE TABLE shops(id uuid PRIMARY KEY); CREATE TABLE barbers(id uuid PRIMARY KEY,shop_id uuid);
+CREATE TABLE booking_drafts(id uuid PRIMARY KEY,expires_at timestamptz);
+CREATE EXTENSION btree_gist;
+CREATE TABLE appointments(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),acuity_id bigint,barber_id uuid,starts_at timestamptz,ends_at timestamptz,status text DEFAULT 'scheduled',overlap_exempt boolean DEFAULT false);
+ALTER TABLE appointments ADD CONSTRAINT appointments_no_barber_overlap EXCLUDE USING gist (barber_id WITH =,tstzrange(starts_at,ends_at,'[)') WITH &&) WHERE (overlap_exempt=false AND status NOT IN ('cancelled','no_show'));
+GRANT USAGE ON SCHEMA public,auth TO authenticated; GRANT SELECT,INSERT,UPDATE ON appointments TO authenticated;
+CREATE FUNCTION public.guard_overlap_exempt() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$ BEGIN IF (TG_OP='INSERT' AND NEW.overlap_exempt=true OR TG_OP='UPDATE' AND NEW.overlap_exempt IS DISTINCT FROM OLD.overlap_exempt) AND coalesce(current_setting('app.overlap_override',true),'') <> 'on' THEN RAISE EXCEPTION 'Unauthorized overlap'; END IF; RETURN NEW; END $$;
+CREATE TRIGGER trg_guard_overlap_exempt BEFORE INSERT OR UPDATE ON appointments FOR EACH ROW EXECUTE FUNCTION guard_overlap_exempt();

@@ -1,0 +1,1 @@
+ALTER TABLE public.block_times ALTER COLUMN acuity_block_id TYPE bigint;

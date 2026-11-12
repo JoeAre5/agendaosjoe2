@@ -1,0 +1,1 @@
+ALTER TABLE public.user_preferences ALTER COLUMN theme SET DEFAULT 'system';
