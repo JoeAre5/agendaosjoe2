@@ -235,6 +235,8 @@ export async function loadAvailabilityInput(admin: Client, opts: LoadOptions): P
         .eq("shop_id", shopId)
         .in("barber_id", barberIds)
         .not("status", "in", "(cancelled,no_show)")
+        // Igual que get_busy_intervals (migracion 0016): las citas con overlap_exempt no bloquean.
+        .eq("overlap_exempt", false)
         .gte("starts_at", scanStart)
         .lt("starts_at", rangeEnd)
         .gt("ends_at", rangeStart);
@@ -250,25 +252,25 @@ export async function loadAvailabilityInput(admin: Client, opts: LoadOptions): P
       .lt("starts_at", rangeEnd)
       .gt("ends_at", rangeStart),
     (() => {
+      // Reservas temporales de este proyecto (acquire_booking_hold, migracion 0016).
       let q = admin
-        .from("booking_drafts")
-        .select("id,barber_id,starts_at,ends_at")
+        .from("booking_draft_holds")
+        .select("id,draft_id,barber_id,starts_at,ends_at")
         .eq("shop_id", shopId)
         .in("barber_id", barberIds)
-        .in("status", ["pending", "processing"])
+        .eq("status", "active")
         .gt("expires_at", now)
-        .not("starts_at", "is", null)
         .gte("starts_at", scanStart)
         .lt("starts_at", rangeEnd)
         .gt("ends_at", rangeStart);
-      if (opts.excludeDraftId) q = q.neq("id", opts.excludeDraftId);
+      if (opts.excludeDraftId) q = q.neq("draft_id", opts.excludeDraftId);
       return q;
     })(),
   ]);
   if (whRes.error) fail(whRes.error, "working_hours_read_failed");
   if (apptRes.error) fail(apptRes.error, "appointments_read_failed");
   if (blockRes.error) fail(blockRes.error, "block_times_read_failed");
-  if (holdRes.error) fail(holdRes.error, "drafts_read_failed");
+  if (holdRes.error) fail(holdRes.error, "holds_read_failed");
 
   type Row = Record<string, unknown>;
   const byBarber = <T extends Row>(rows: T[] | null | undefined) => {

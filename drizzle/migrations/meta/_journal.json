@@ -155,6 +155,20 @@
       "when": 1794424252241,
       "tag": "0021_staff_record_created_appointment",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794483102023,
+      "tag": "0022_native_scheduling_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794483103023,
+      "tag": "0023_native_booking_functions",
+      "breakpoints": true
     }
   ]
 }
