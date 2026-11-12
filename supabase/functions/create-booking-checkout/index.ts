@@ -252,6 +252,12 @@ serve(async (req) => {
   } catch (e) {
     const msg = (e as Error).message || "";
     console.error("[create-booking-checkout] stripe.checkout.sessions.create failed:", msg);
+    // Detalle para diagnosticar (sin claves): tipo, codigo HTTP y causa de red subyacente.
+    const se = e as { type?: string; code?: string; statusCode?: number; detail?: unknown; cause?: unknown };
+    console.error("[create-booking-checkout] stripe error detail:", JSON.stringify({
+      type: se.type ?? null, code: se.code ?? null, statusCode: se.statusCode ?? null,
+      detail: String(se.detail ?? "").slice(0, 300), cause: String((se.cause as Error)?.message ?? se.cause ?? "").slice(0, 300),
+    }));
     if (/rak_checkout_session_write|Checkout Sessions?:? Write/i.test(msg)) {
       return errRes(
         500,

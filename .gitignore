@@ -25,3 +25,6 @@ dist-ssr
 
 # Entorno de prueba (apunta al proyecto de prueba, no a produccion)
 .env.prueba
+
+# Secretos locales temporales (nunca se suben)
+*.secrets.env

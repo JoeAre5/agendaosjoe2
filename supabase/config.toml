@@ -47,3 +47,13 @@ verify_jwt = false
 
 [functions.webhook-echo]
 verify_jwt = false
+
+# Webhooks de servicios externos: no envian JWT de Supabase; cada funcion valida su propia firma/secreto.
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.athmovil-webhook]
+verify_jwt = false
+
+[functions.acuity-webhook]
+verify_jwt = false
