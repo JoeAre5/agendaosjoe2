@@ -9,5 +9,7 @@ export interface PortalAppointment {
   barber_color: string | null;
   acuity_id: number;
   service_id?: number | null;
+  /** Local service uuid: native appointments have no Acuity service_id. */
+  service_ref_id?: string | null;
   duration_minutes?: number;
 }

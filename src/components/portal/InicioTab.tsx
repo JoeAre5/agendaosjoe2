@@ -6,6 +6,7 @@ import { useTranslation } from "@/hooks/useTranslation";
 import type { PortalAppointment } from "./types";
 import { PortalBrandLogo } from "@/components/PortalBrandLogo";
 import AppointmentCard from "./AppointmentCard";
+import { serviceKey } from "./serviceKey";
 
 interface InicioTabProps {
   firstName: string;
@@ -133,7 +134,7 @@ export default function InicioTab({ firstName, upcoming, past, cancelWindowHours
                     const params = new URLSearchParams({
                       apptId: next.id,
                       acuityId: String(next.acuity_id),
-                      typeId: String(next.service_id || ""),
+                      typeId: serviceKey(next),
                       barberId: next.barber_id,
                       service: next.service_name,
                       barber: next.barber_name,
@@ -350,7 +351,7 @@ export default function InicioTab({ firstName, upcoming, past, cancelWindowHours
                   const params = new URLSearchParams({
                     repeat: "true",
                     barberId: lastVisit.barber_id,
-                    serviceTypeId: String(lastVisit.service_id || ""),
+                    serviceTypeId: serviceKey(lastVisit),
                     serviceName: lastVisit.service_name,
                     duration: String(lastVisit.duration_minutes || 30),
                     barberName: lastVisit.barber_name,

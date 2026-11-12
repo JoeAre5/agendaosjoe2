@@ -162,12 +162,12 @@ export default function ClientPortalV2() {
     // transactions: filter item_type='product' server-side via embedded filter.
     const [payRes, upRes, pastRes, prodRes] = await Promise.all([
       (supabase.rpc as any)("get_client_payment_details", { _client_id: clientId }),
-      supabase.from("appointments").select("id,service_name,starts_at,ends_at,status,barber_id,acuity_id,service_id,duration_minutes")
+      supabase.from("appointments").select("id,service_name,starts_at,ends_at,status,barber_id,acuity_id,service_id,service_ref_id,duration_minutes")
         .eq("client_id", clientId)
         .in("status", ["scheduled", "confirmed"])
         .gte("starts_at", now)
         .order("starts_at", { ascending: true }),
-      supabase.from("appointments").select("id,service_name,starts_at,ends_at,status,barber_id,acuity_id,service_id,duration_minutes")
+      supabase.from("appointments").select("id,service_name,starts_at,ends_at,status,barber_id,acuity_id,service_id,service_ref_id,duration_minutes")
         .eq("client_id", clientId)
         .lt("starts_at", now)
         .not("status", "in", "(cancelled,no-show)")

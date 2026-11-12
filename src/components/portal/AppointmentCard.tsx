@@ -4,6 +4,7 @@ import { Repeat } from "lucide-react";
 import { useTranslation } from "@/hooks/useTranslation";
 import { canCancelNow } from "@/lib/cancelPolicy";
 import type { PortalAppointment } from "./types";
+import { serviceKey } from "./serviceKey";
 
 interface Props {
   appt: PortalAppointment;
@@ -38,7 +39,7 @@ export default function AppointmentCard({ appt, onCancel, showStatus }: Props) {
     const params = new URLSearchParams({
       apptId: appt.id,
       acuityId: String(appt.acuity_id),
-      typeId: String(appt.service_id || ""),
+      typeId: serviceKey(appt),
       barberId: appt.barber_id,
       service: appt.service_name,
       barber: appt.barber_name,
@@ -53,7 +54,7 @@ export default function AppointmentCard({ appt, onCancel, showStatus }: Props) {
     const params = new URLSearchParams({
       repeat: "true",
       barberId: appt.barber_id,
-      serviceTypeId: String(appt.service_id || ""),
+      serviceTypeId: serviceKey(appt),
       serviceName: appt.service_name,
       duration: String(appt.duration_minutes || 30),
       barberName: appt.barber_name,
