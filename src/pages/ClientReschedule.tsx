@@ -12,27 +12,7 @@ import {
 import { format, addDays, startOfWeek, isToday, isSameDay, isBefore, startOfDay, addMinutes, addMonths } from "date-fns";
 import { es, enUS } from "date-fns/locale";
 import { motion, AnimatePresence } from "motion/react";
-
-async function acuityProxy(path: string, method = "GET", body?: any): Promise<any> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not authenticated");
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const res = await fetch(
-    `https://${projectId}.supabase.co/functions/v1/acuity-proxy`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify({ path, method, body }),
-    }
-  );
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.message || json?.error || `Error ${res.status}`);
-  return json;
-}
+import { schedulingProxy as acuityProxy } from "@/lib/scheduling";
 
 interface AcuityTimeSlot { time: string; slotsAvailable: number; }
 

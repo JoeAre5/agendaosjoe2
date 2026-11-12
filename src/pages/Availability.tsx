@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { format, addMonths, subMonths, startOfMonth, getDaysInMonth, getDay, isSameDay, isToday, parseISO } from "date-fns";
 import { es, enUS } from "date-fns/locale";
+import { schedulingProxy as acuityProxy } from "@/lib/scheduling";
 
 /* ─── Barber colors ─── */
 const BARBER_COLORS: Record<string, string> = {
@@ -25,27 +26,6 @@ function getBarberColor(name: string): string {
 }
 
 /* ─── Acuity proxy ─── */
-async function acuityProxy(path: string): Promise<any> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not authenticated");
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const res = await fetch(
-    `https://${projectId}.supabase.co/functions/v1/acuity-proxy`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify({ path, method: "GET" }),
-    }
-  );
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "Acuity error");
-  return json;
-}
-
 interface AcuityType {
   id: number;
   name: string;

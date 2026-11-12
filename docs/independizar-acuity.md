@@ -13,16 +13,19 @@ Pedido del cliente: que los servicios, los horarios y la disponibilidad dejen de
 ## Estado de partida (12-nov-2026)
 `tsc` sin errores, 261 tests, build correcto. Las tablas de catálogo ya existen (`services`, `service_addons`, `working_hours`, `shop_hours`, `block_times`), hoy sincronizadas desde Acuity.
 
-## Qué trae Hasib y qué se copia
-| Pieza | Archivos | Estado |
-|---|---|---|
-| Motor de disponibilidad (puro) | `_shared/availability/engine.ts`, `types.ts`, `load.ts` + `engine_test.ts` | **Copiado.** `deno check` limpio, 26 pruebas pasan junto con el catálogo |
-| Catálogo nativo | `_shared/native/catalog.ts` + test | **Copiado** |
-| Esquema (aditivo, reversible) | migración `b1`: ids de Acuity opcionales, referencias nativas, índices | Pendiente de adaptar |
-| Funciones de base | `b4`, `b5`: `book_native_slot`, `reschedule_native_appointment`, `cancel_native_appointment` | Pendiente de adaptar |
-| Capa de proveedor del servidor | `_shared/bookingProvider.ts`, `functions/native-scheduling`, `functions/availability` | Pendiente |
-| Capa de proveedor del frontend | `src/lib/scheduling/*` (alterna Acuity y nativo) | Pendiente |
-| Editores del admin | `components/scheduling/HoursEditor.tsx`, `ServiceEditorSheet.tsx`, cambios en `Services.tsx` y `Availability.tsx` | Pendiente |
+## Avance (12-nov-2026)
+| Pieza | Estado |
+|---|---|
+| Motor de disponibilidad y catálogo nativo (`_shared/availability`, `_shared/native`) | **Hecho.** Lee `booking_draft_holds` y respeta `overlap_exempt`. 26 pruebas. |
+| Esquema (`drizzle/migrations/0022`) | **Hecho, sin aplicar.** Ids de Acuity opcionales, referencias nativas, índices. |
+| Funciones SQL de escritura (`0023`: `book_native_slot`, `reschedule_native_appointment`, `cancel_native_appointment`) | **Hecho, sin aplicar.** Solo service_role, mismo candado por barbero que las reservas temporales. **53 pruebas** sobre un Postgres en memoria (esquema mínimo, no el real). |
+| Servidor: `native-scheduling`, `availability`, `_shared/nativeBooking.ts`, `_shared/singleShop.ts` | **Hecho.** `deno check` sin errores. Sin desplegar. |
+| Frontend: capa de proveedor (`src/lib/scheduling`) y 10 pantallas conectadas a ella | **Hecho.** Con Acuity (por defecto) se comporta igual. 271 tests, tipos y build en verde. |
+| Pantallas con flujo nativo completo (crear, editar, walk-in, bloqueos, reserva del cliente) | **Pendiente.** Hoy las rutas con `acuity_id` ya usan `appointmentRef`, pero crear/editar cita siguen creando el espejo local pensado para Acuity. |
+| Editores de servicios y horarios (`ServiceEditorSheet`, `HoursEditor`, cambios en `Services` y `Availability`) | **Pendiente.** |
+| Pagos: reserva en línea nativa (`pay-then-book`, `commitDraft`, ATH, Stripe, PayPal) respetando saldo restante y `edit_line_items` | **Pendiente.** |
+| Sincronización con Acuity en modo nativo (`acuity-sync`, `acuity-webhook`, `useCalendarData`) | **Pendiente:** hay que apagarla por tienda. |
+| Migrar citas futuras y corte | **Pendiente**, con aprobación. |
 
 ## Adaptaciones necesarias (lo que no se puede copiar tal cual)
 - **Contexto de tienda.** El código de Hasib usa `withShopScope`, `resolveRequestShop` y las funciones SQL `request_shop_id()` e `is_service_context()`, que vienen de su capa multi-tienda (`a1`) y **no existen aquí**. No se trae esa capa entera (es un RLS restrictivo sobre todas las tablas, demasiado riesgoso). Se crea un adaptador de una sola tienda: resuelve la tienda única de Charlie y devuelve el cliente tal cual. Mantiene la puerta abierta al multi-tienda futuro.

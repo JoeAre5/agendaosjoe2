@@ -50,6 +50,7 @@ import RecurringScopeDialog, { type RecurringScope } from "@/components/Recurrin
 import RecurringProgressModal, { type ProgressAction } from "@/components/RecurringProgressModal";
 import { findMatchingClient, relinkAppointment, type ClientMatch } from "@/lib/clientMatching";
 import { ClientMatchConfirmDialog } from "@/components/ClientMatchConfirmDialog";
+import { schedulingProxy as acuityProxy, appointmentRef } from "@/lib/scheduling";
 
 /* ─── barber identity colors ─── */
 const BARBER_COLORS: Record<string, string> = {
@@ -68,32 +69,6 @@ function getBarberColor(name: string): string {
 /* ─── acuity proxy helper ─── */
 const isSyntheticAcuityId = (id: number | null | undefined): boolean =>
   typeof id === "number" && id < 0;
-
-async function acuityProxy(path: string, method = "GET", body?: any): Promise<any> {
-  const apptIdMatch = path.match(/\/appointments\/(-?\d+)/);
-  if (apptIdMatch && isSyntheticAcuityId(parseInt(apptIdMatch[1], 10))) {
-    return null;
-  }
-
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not authenticated");
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const res = await fetch(
-    `https://${projectId}.supabase.co/functions/v1/acuity-proxy`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify({ path, method, body }),
-    }
-  );
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.message || json?.error || `Acuity error ${res.status}`);
-  return json;
-}
 
 function toAcuityFromStoredIso(storedIso: string, timeSourceIso: string, tz: string): string {
   const dateSource = parseISO(storedIso);
@@ -542,7 +517,7 @@ export default function EditAppointment() {
       // Load Acuity data + local DB services
       try {
         const [acuity, typesData, calsData, addonsData, dbSvcRes] = await Promise.all([
-          acuityProxy(`/appointments/${a.acuity_id}`),
+          acuityProxy(`/appointments/${appointmentRef(a, false)}`),
           acuityProxy("/appointment-types"),
           acuityProxy("/calendars"),
           acuityProxy("/appointment-addons"),
@@ -833,7 +808,7 @@ export default function EditAppointment() {
           if (notesChanged) acuityBody.notes = notesValue;
           if (isBulkRecurring) acuityBody.noEmail = true;
           if (Object.keys(acuityBody).length > 1) {
-            await acuityProxy(`/appointments/${target.acuity_id}`, "PUT", acuityBody);
+            await acuityProxy(`/appointments/${appointmentRef(target, false)}`, "PUT", acuityBody);
           }
 
           // Reschedule (compute the matching datetime per occurrence so siblings keep their date and just shift time-of-day if changed)
@@ -870,7 +845,7 @@ export default function EditAppointment() {
                   continue;
                 }
               }
-              const result = await acuityProxy(`/appointments/${target.acuity_id}/reschedule`, "PUT", rescheduleBody);
+              const result = await acuityProxy(`/appointments/${appointmentRef(target, false)}/reschedule`, "PUT", rescheduleBody);
               const durationMs = finalDuration * 60000;
               newStartsAt = result?.datetime || new Date(perTargetDatetime).toISOString();
               newEndsAt = new Date(new Date(newStartsAt).getTime() + durationMs).toISOString();

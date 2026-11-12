@@ -24,6 +24,7 @@ import { ProductsStep, type ProductCart, type ProductLineItem } from "@/componen
 import { normalizePhone10 } from "@/lib/phone";
 import { useTranslation } from "@/hooks/useTranslation";
 import { usePersistentState, writePersistent } from "@/lib/persistentState";
+import { schedulingProxy as acuityProxy } from "@/lib/scheduling";
 
 const BOOKING_KEY = "clientNewAppt.v1";
 const clearBookingDraft = () => {
@@ -35,27 +36,6 @@ const clearBookingDraft = () => {
 };
 
 /* ─── acuity proxy helper ─── */
-async function acuityProxy(path: string, method = "GET", body?: any): Promise<any> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not authenticated");
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const res = await fetch(
-    `https://${projectId}.supabase.co/functions/v1/acuity-proxy`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify({ path, method, body }),
-    }
-  );
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.message || json?.error || `Acuity proxy error ${res.status}`);
-  return json;
-}
-
 interface AcuityType {
   id: number; name: string; duration: number; price: string;
   color: string; calendarIDs: number[]; category: string;

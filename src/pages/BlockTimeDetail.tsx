@@ -24,6 +24,7 @@ import {
   DrawerFooter,
   DrawerClose,
 } from "@/components/ui/drawer";
+import { schedulingProxy as acuityProxy } from "@/lib/scheduling";
 
 interface BlockData {
   id: string;
@@ -42,24 +43,6 @@ interface BarberInfo {
   id: string;
   name: string;
   color: string | null;
-}
-
-async function acuityProxy(path: string, method = "GET", body?: any): Promise<any> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not authenticated");
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const res = await fetch(`https://${projectId}.supabase.co/functions/v1/acuity-proxy`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      "Content-Type": "application/json",
-      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-    },
-    body: JSON.stringify({ path, method, body }),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || `Acuity error ${res.status}`);
-  return json;
 }
 
 export default function BlockTimeDetail() {

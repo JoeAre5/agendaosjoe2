@@ -25,6 +25,7 @@ import { BookingProgress, type BookingProgressChip } from "@/components/site/boo
 import { findMatchingClient, type ClientMatch } from "@/lib/clientMatching";
 import { SubpageHeader } from "@/components/SubpageHeader";
 import { ClientMatchConfirmDialog } from "@/components/ClientMatchConfirmDialog";
+import { schedulingProxy as acuityProxy } from "@/lib/scheduling";
 
 
 /* ─── types ─── */
@@ -46,23 +47,6 @@ function normalizeServiceName(n: string) { return n.toLowerCase().trim().replace
 function isAllowedService(n: string) { return ALLOWED_SERVICES.includes(normalizeServiceName(n)); }
 
 /* ─── acuity proxy ─── */
-async function acuityProxy(path: string, method = "GET", body?: any): Promise<any> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not authenticated");
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const res = await fetch(
-    `https://${projectId}.supabase.co/functions/v1/acuity-proxy`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json", apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-      body: JSON.stringify({ path, method, body }),
-    }
-  );
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.message || json?.error || `Acuity proxy error ${res.status}`);
-  return json;
-}
-
 type Step = "client" | "service" | "slot";
 
 /* ─── main component ─── */

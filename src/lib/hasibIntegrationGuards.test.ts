@@ -23,8 +23,18 @@ describe("Hasib integration exclusions", () => {
     expect(existsSync("scripts/dev-reset.mjs")).toBe(false);
     expect(existsSync("supabase/seed.sql")).toBe(false);
   });
-  it("does not route bookings through native scheduling yet", () => {
-    expect(existsSync("src/lib/scheduling/index.ts")).toBe(false);
-    expect(fns).not.toContain("native-scheduling");
+  // La agenda nativa (independizar el calendario de Acuity) ya existe, pero Acuity sigue siendo el
+  // proveedor por defecto: ninguna tienda cambia sola. El corte se hace por tienda y con autorizacion.
+  it("native scheduling exists but Acuity stays the default provider", () => {
+    expect(existsSync("src/lib/scheduling/index.ts")).toBe(true);
+    expect(fns).toContain("native-scheduling");
+    expect(readFileSync("src/lib/scheduling/provider.ts", "utf8")).toMatch(/FALLBACK[^=]*=\s*\{[^}]*kind:\s*"acuity"/);
+  });
+  it("no migration switches every shop to the native scheduler", () => {
+    const sql = [
+      ...readdirSync("drizzle/migrations").filter((f) => f.endsWith(".sql")).map((f) => readFileSync(`drizzle/migrations/${f}`, "utf8")),
+      ...readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).map((f) => readFileSync(`supabase/migrations/${f}`, "utf8")),
+    ].join("\n");
+    expect(sql).not.toMatch(/UPDATE\s+(public\.)?shops\s+SET\s+booking_provider\s*=\s*'native'/i);
   });
 });

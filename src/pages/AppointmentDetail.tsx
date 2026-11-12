@@ -63,6 +63,7 @@ import RecurringScopeDialog, { type RecurringScope } from "@/components/Recurrin
 import RecurringProgressModal, { type ProgressAction } from "@/components/RecurringProgressModal";
 import PayQrSheet from "@/components/admin/PayQrSheet";
 import SavedCardChargeSheet from "@/components/admin/SavedCardChargeSheet";
+import { schedulingProxy as acuityProxy, appointmentRef } from "@/lib/scheduling";
 
 /* ─── barber identity colors ─── */
 const BARBER_COLORS: Record<string, string> = {
@@ -83,34 +84,6 @@ function getBarberColor(name: string): string {
 // In-app-only appointments use synthetic negative acuity_ids and don't exist in Acuity
 export const isSyntheticAcuityId = (id: number | null | undefined): boolean =>
   typeof id === "number" && id < 0;
-
-async function acuityProxy(path: string, method = "GET", body?: any): Promise<any> {
-  // Short-circuit any call targeting a synthetic appointment id
-  const apptIdMatch = path.match(/\/appointments\/(-?\d+)/);
-  if (apptIdMatch && parseInt(apptIdMatch[1], 10) < 0) {
-    // Return a benign empty payload — callers handle missing data gracefully
-    return null;
-  }
-
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not authenticated");
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const res = await fetch(
-    `https://${projectId}.supabase.co/functions/v1/acuity-proxy`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify({ path, method, body }),
-    }
-  );
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.message || json?.error || `Acuity error ${res.status}`);
-  return json;
-}
 
 interface AcuityTimeSlot {
   time: string;
@@ -328,7 +301,7 @@ export default function AppointmentDetail() {
             addonIDs: editSelectedAddons,
           };
           if (isBulkRecurringEdit) putBody.noEmail = true;
-          const result = await acuityProxy(`/appointments/${target.acuity_id}`, "PUT", putBody);
+          const result = await acuityProxy(`/appointments/${appointmentRef(target, false)}`, "PUT", putBody);
 
           // For synthetic IDs, result is null — fall back to chosen service values
           const newDuration = result?.duration || editSelectedService.duration;
@@ -443,7 +416,7 @@ export default function AppointmentDetail() {
 
       // Get Acuity data
       try {
-        const acuity = await acuityProxy(`/appointments/${row.acuity_id}`);
+        const acuity = await acuityProxy(`/appointments/${appointmentRef(row, false)}`);
         setAcuityData(acuity);
       } catch {
         // non-blocking
@@ -577,7 +550,7 @@ export default function AppointmentDetail() {
 
       // 1) Update in Acuity
       if (appt.acuity_id) {
-        await acuityProxy(`/appointments/${appt.acuity_id}`, "PUT", {
+        await acuityProxy(`/appointments/${appointmentRef(appt, false)}`, "PUT", {
           firstName: editClientFirstName.trim(),
           lastName: editClientLastName.trim(),
           phone: editClientPhone.trim(),
@@ -650,7 +623,7 @@ export default function AppointmentDetail() {
     if (!appt) return;
     setSavingNotes(true);
     try {
-      await acuityProxy(`/appointments/${appt.acuity_id}`, "PUT", { notes: notesValue });
+      await acuityProxy(`/appointments/${appointmentRef(appt, false)}`, "PUT", { notes: notesValue });
       await supabase.from("appointments").update({ notes: notesValue }).eq("id", appt.id);
       setAppt((prev: any) => ({ ...prev, notes: notesValue }));
       setEditingNotes(false);
@@ -960,7 +933,7 @@ export default function AppointmentDetail() {
           const body: any = { datetime: datetimeIso, admin: true };
           // Force noEmail on bulk recurring reschedules to prevent inbox spam
           if (!sendRescheduleEmail || targets.length > 1) body.noEmail = true;
-          const result = await acuityProxy(`/appointments/${target.acuity_id}/reschedule`, "PUT", body);
+          const result = await acuityProxy(`/appointments/${appointmentRef(target, false)}/reschedule`, "PUT", body);
 
           // For synthetic IDs, acuityProxy returns null — compute new times locally
           const newStartIso = result?.datetime || datetimeIso;
@@ -1096,7 +1069,7 @@ export default function AppointmentDetail() {
           try {
             const cancelBody: any = { admin: true };
             if (targets.length > 1) cancelBody.noEmail = true;
-            await acuityProxy(`/appointments/${target.acuity_id}/cancel`, "PUT", cancelBody);
+            await acuityProxy(`/appointments/${appointmentRef(target, false)}/cancel`, "PUT", cancelBody);
           } catch (acuityErr) {
             console.warn("Acuity cancel failed (will still hard-delete locally)", target.id, acuityErr);
           }

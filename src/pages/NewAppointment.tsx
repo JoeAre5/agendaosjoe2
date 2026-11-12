@@ -69,27 +69,6 @@ import { BookingProgress, type BookingProgressChip } from "@/components/site/boo
 import { ProductsStep, type ProductCart } from "@/components/site/booking/ProductsStep";
 
 /* ─── helpers ─── */
-async function acuityProxy(path: string, method = "GET", body?: any): Promise<any> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not authenticated");
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const res = await fetch(
-    `https://${projectId}.supabase.co/functions/v1/acuity-proxy`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify({ path, method, body }),
-    }
-  );
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.message || json?.error || `Acuity proxy error ${res.status}`);
-  return json;
-}
-
 interface AcuityType {
   id: number;
   name: string;
@@ -125,6 +104,7 @@ type Step = "barber" | "service" | "addons" | "datetime" | "summary";
 
 /* ─── Custom time helpers ─── */
 import { getShopTimezone, getShopNextSlot, toAcuityDatetimeInTz } from "@/lib/timezone";
+import { schedulingProxy as acuityProxy, appointmentRef } from "@/lib/scheduling";
 
 function buildCustomDatetime(date: Date, hours: number, minutes: number, tz: string): string {
   // Interpret wall-clock components in the shop's timezone, emit Acuity-format ISO with correct offset.
@@ -395,7 +375,7 @@ export default function NewAppointment() {
         // Fetch acuity data for full details
         let acuityData: any = null;
         try {
-          acuityData = await acuityProxy(`/appointments/${appt.acuity_id}`, "GET");
+          acuityData = await acuityProxy(`/appointments/${appointmentRef(appt, false)}`, "GET");
         } catch { /* non-blocking */ }
 
         // Match calendar (barber)

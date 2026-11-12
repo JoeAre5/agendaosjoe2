@@ -52,6 +52,7 @@ import { usePersistentState } from "@/lib/persistentState";
 import { useUrlState, isUuid } from "@/lib/urlState";
 import ClientReferralNetwork from "@/components/admin/ClientReferralNetwork";
 import { ClientBirthdayField } from "@/components/ClientBirthdayField";
+import { schedulingProxy as acuityProxy, appointmentRef } from "@/lib/scheduling";
 
 type Client = {
   id: string;
@@ -592,27 +593,6 @@ export default function Clients() {
   };
 
   // Acuity proxy helper for client sync
-  const acuityProxy = async (path: string, method = "GET", body?: any): Promise<any> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw new Error("Not authenticated");
-    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-    const res = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/acuity-proxy`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({ path, method, body }),
-      }
-    );
-    const json = await res.json();
-    if (!res.ok) throw new Error(json?.message || json?.error || `Acuity error ${res.status}`);
-    return json;
-  };
-
   // Save contact info changes (Supabase clients + appointments + Acuity)
   const saveContact = async () => {
     if (!selectedClient || savingContact) return;
@@ -754,7 +734,7 @@ export default function Clients() {
     for (const appointment of futureAppointments || []) {
       if (typeof appointment.acuity_id === "number" && appointment.acuity_id > 0) {
         try {
-          await acuityProxy(`/appointments/${appointment.acuity_id}/cancel`, "PUT", {
+          await acuityProxy(`/appointments/${appointmentRef(appointment, false)}/cancel`, "PUT", {
             admin: true,
             noEmail: true,
             cancelNote: "Client deleted by shop",
