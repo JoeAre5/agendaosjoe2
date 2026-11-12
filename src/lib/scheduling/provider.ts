@@ -33,26 +33,34 @@ export async function getShopProvider(force = false): Promise<ShopProviderInfo> 
   if (inflight && !force) return inflight;
   inflight = (async () => {
     let info: ShopProviderInfo = FALLBACK;
+    let resolved = false;
     try {
-      const { data } = await supabase
-        .from("shops")
-        .select("id, booking_provider, timezone, is_active")
-        .eq("is_active", true)
-        .limit(2);
-      if (data && data.length === 1) {
-        const row = data[0];
-        const kind = (row.booking_provider as BookingProviderKind) || "acuity";
-        info = {
-          shopId: row.id,
-          kind,
-          acuityEnabled: kind === "acuity",
-          timezone: row.timezone || FALLBACK.timezone,
-        };
+      // 1) Funcion segura legible por todos (visitantes y clientes no pueden leer `shops`).
+      const { data: rpcData, error: rpcError } = await (supabase.rpc as any)("get_shop_booking_provider");
+      const r = rpcData as { shop_id?: string; booking_provider?: string; timezone?: string } | null;
+      if (!rpcError && r?.shop_id) {
+        const kind = (r.booking_provider as BookingProviderKind) || "acuity";
+        info = { shopId: r.shop_id, kind, acuityEnabled: kind === "acuity", timezone: r.timezone || FALLBACK.timezone };
+        resolved = true;
+      } else {
+        // 2) Respaldo: lectura directa (staff). Sirve mientras la funcion no este desplegada.
+        const { data } = await supabase
+          .from("shops")
+          .select("id, booking_provider, timezone, is_active")
+          .eq("is_active", true)
+          .limit(2);
+        if (data && data.length === 1) {
+          const row = data[0];
+          const kind = (row.booking_provider as BookingProviderKind) || "acuity";
+          info = { shopId: row.id, kind, acuityEnabled: kind === "acuity", timezone: row.timezone || FALLBACK.timezone };
+          resolved = true;
+        }
       }
     } catch {
       /* se conserva el valor por defecto (Acuity) */
     }
-    cached = info;
+    // Solo se guarda en cache una lectura real: un fallo transitorio no debe dejar la sesion en Acuity.
+    if (resolved) cached = info;
     inflight = null;
     return info;
   })();

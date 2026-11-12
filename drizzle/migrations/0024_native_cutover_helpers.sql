@@ -141,3 +141,20 @@ GRANT EXECUTE ON FUNCTION public.native_backfill_service_refs(uuid) TO service_r
 GRANT EXECUTE ON FUNCTION public.native_cutover_check(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.switch_shop_to_native(uuid, uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.switch_shop_to_acuity(uuid, uuid) TO service_role;
+
+-- Proveedor de agenda de la tienda unica, legible por cualquiera (visitantes, clientes, staff).
+-- Los clientes y visitantes no pueden leer public.shops, y el navegador necesita saber si la tienda
+-- agenda de forma nativa. Solo expone lo no sensible: id, proveedor y zona horaria.
+-- Devuelve NULL si no hay exactamente una tienda activa (el navegador conserva entonces Acuity).
+CREATE OR REPLACE FUNCTION public.get_shop_booking_provider()
+RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
+AS $$
+  SELECT CASE WHEN count(*) = 1
+    THEN (SELECT jsonb_build_object('shop_id', s.id, 'booking_provider', s.booking_provider, 'timezone', s.timezone)
+            FROM public.shops s WHERE s.is_active LIMIT 1)
+    ELSE NULL END
+  FROM public.shops WHERE is_active;
+$$;
+REVOKE ALL ON FUNCTION public.get_shop_booking_provider() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_shop_booking_provider() TO anon, authenticated, service_role;
