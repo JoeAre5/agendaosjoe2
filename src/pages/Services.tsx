@@ -10,11 +10,14 @@ import {
 import { SubpageHeader } from "@/components/SubpageHeader";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
+import { getShopProvider, useShopProvider } from "@/lib/scheduling";
+import { AddonEditorSheet, ServiceEditorSheet, type EditableAddon, type EditableService } from "@/components/scheduling/ServiceEditorSheet";
 
 /* ─── Types ─── */
 interface ServiceRow {
   id: string;
-  acuity_type_id: number;
+  /** Acuity appointment type id; null for services managed natively */
+  acuity_type_id: number | null;
   name: string;
   description: string | null;
   duration_minutes: number;
@@ -26,11 +29,13 @@ interface ServiceRow {
   is_public: boolean;
   sort_order: number;
   locally_edited: boolean;
+  padding_before_minutes?: number | null;
+  padding_after_minutes?: number | null;
 }
 
 interface AddonRow {
   id: string;
-  acuity_addon_id: number;
+  acuity_addon_id: number | null;
   name: string;
   price_cents: number;
   duration_minutes: number;
@@ -65,12 +70,17 @@ export default function Services() {
   const [editPrice, setEditPrice] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Native scheduler (Phase B7): the catalogue is edited here, not synced from Acuity.
+  const { isNative } = useShopProvider();
+  const [serviceEditor, setServiceEditor] = useState<{ open: boolean; service: EditableService | null }>({ open: false, service: null });
+  const [addonEditor, setAddonEditor] = useState<{ open: boolean; addon: EditableAddon | null }>({ open: false, addon: null });
+
   const fetchAll = useCallback(async (syncFromAcuity = false) => {
     setLoading(true);
     try {
       let syncErrorMessage: string | null = null;
 
-      if (syncFromAcuity) {
+      if (syncFromAcuity && (await getShopProvider()).kind !== "native") {
         const { data: syncData, error: syncError } = await supabase.functions.invoke("acuity-sync-services");
 
         if (syncError) {
@@ -104,7 +114,7 @@ export default function Services() {
         setMyBarberId(barberId);
       }
 
-      let sQuery = supabase.from("services").select("id, acuity_type_id, name, description, duration_minutes, price_cents, category, barber_id, addon_ids, is_active, is_public, sort_order, locally_edited");
+      let sQuery = supabase.from("services").select("id, acuity_type_id, name, description, duration_minutes, price_cents, category, barber_id, addon_ids, is_active, is_public, sort_order, locally_edited, padding_before_minutes, padding_after_minutes");
       let aQuery = supabase.from("service_addons").select("id, acuity_addon_id, name, price_cents, duration_minutes, barber_id").eq("is_active", true);
       let bQuery = supabase.from("barbers_public").select("id, name, color").eq("is_active", true);
 
@@ -166,10 +176,15 @@ export default function Services() {
   const grouped = useMemo(() => {
     const map = new Map<string, { barber: BarberRow; services: ServiceRow[] }>();
     for (const b of barbers) map.set(b.id, { barber: b, services: [] });
+    // Native shops: services without a barber are offered by every barber.
+    const allBarbers: BarberRow = { id: "__all__", name: language === "es" ? "Todos los barberos" : "All barbers", color: null };
     for (const s of services) {
       if (s.barber_id) {
         const entry = map.get(s.barber_id);
         if (entry) entry.services.push(s);
+      } else if (isOwner || services.every((x) => !x.barber_id)) {
+        if (!map.has(allBarbers.id)) map.set(allBarbers.id, { barber: allBarbers, services: [] });
+        map.get(allBarbers.id)!.services.push(s);
       }
     }
     // Sort each barber's services by sort_order, then name
@@ -177,17 +192,27 @@ export default function Services() {
       entry.services.sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name));
     }
     return Array.from(map.values()).filter((g) => g.services.length > 0);
-  }, [services, barbers]);
+  }, [services, barbers, isOwner, language]);
 
-  const getServiceAddons = useCallback((addonIds: number[] | null, barberId: string | null) => {
+  const getServiceAddons = useCallback((svc: ServiceRow) => {
+    // Native services: every active add-on of the shop (or of that barber) applies.
+    if (svc.acuity_type_id === null) {
+      return addons.filter((a) => a.barber_id === null || a.barber_id === svc.barber_id);
+    }
+    const addonIds = svc.addon_ids;
     if (!addonIds || addonIds.length === 0) return [];
     return addons.filter((a) =>
-      addonIds.includes(a.acuity_addon_id) && a.barber_id === barberId
+      a.acuity_addon_id !== null && addonIds.includes(a.acuity_addon_id) && a.barber_id === svc.barber_id
     );
   }, [addons]);
 
   /* ─── Edit handlers ─── */
   const startEdit = (svc: ServiceRow) => {
+    if (isNative) {
+      // Native services have more fields (category, padding, barber, visibility): full editor.
+      setServiceEditor({ open: true, service: svc });
+      return;
+    }
     setEditingId(svc.id);
     setEditName(svc.name);
     setEditDuration(String(svc.duration_minutes));
@@ -307,17 +332,49 @@ export default function Services() {
                 <ArrowUpDown size={18} />
               </button>
             )}
-            <button
-              onClick={() => fetchAll(true)}
-              disabled={loading}
-              className="p-2 rounded-full active:opacity-60"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
-            </button>
+            {isNative && isOwner ? (
+              <button
+                onClick={() => setServiceEditor({ open: true, service: null })}
+                className="p-2 rounded-full active:opacity-60"
+                style={{ color: "var(--accent-color)" }}
+                aria-label={language === "es" ? "Nuevo servicio" : "New service"}
+              >
+                <Plus size={18} />
+              </button>
+            ) : (
+              <button
+                onClick={() => fetchAll(true)}
+                disabled={loading}
+                className="p-2 rounded-full active:opacity-60"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+              </button>
+            )}
           </>
         }
       />
+
+      {isNative && isOwner && (
+        <>
+          <ServiceEditorSheet
+            open={serviceEditor.open}
+            onOpenChange={(open) => setServiceEditor((prev) => ({ ...prev, open }))}
+            language={language as "es" | "en"}
+            barbers={barbers}
+            service={serviceEditor.service}
+            onSaved={() => void fetchAll(false)}
+          />
+          <AddonEditorSheet
+            open={addonEditor.open}
+            onOpenChange={(open) => setAddonEditor((prev) => ({ ...prev, open }))}
+            language={language as "es" | "en"}
+            barbers={barbers}
+            addon={addonEditor.addon}
+            onSaved={() => void fetchAll(false)}
+          />
+        </>
+      )}
 
       {reorderMode && isOwner && (
         <div className="px-4 pb-2 text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -360,7 +417,7 @@ export default function Services() {
                 {/* Services list */}
                 <div className="rounded-xl overflow-hidden card-elevated">
                   {barberServices.map((svc, i) => {
-                    const svcAddons = getServiceAddons(svc.addon_ids, svc.barber_id);
+                    const svcAddons = getServiceAddons(svc);
                     const isExpanded = expandedType === svc.id;
                     const isEditing = editingId === svc.id;
                     const hasDetails = svc.description || svcAddons.length > 0;
@@ -605,6 +662,47 @@ export default function Services() {
               </motion.div>
             );
           })}
+        </div>
+      )}
+
+      {isNative && isOwner && !loading && (
+        <div className="px-4 pb-10">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold">{language === "es" ? "Adicionales" : "Add-ons"}</span>
+            <button
+              onClick={() => setAddonEditor({ open: true, addon: null })}
+              className="flex items-center gap-1 text-xs font-semibold"
+              style={{ color: "var(--accent-color)" }}
+            >
+              <Plus size={14} /> {language === "es" ? "Nuevo" : "New"}
+            </button>
+          </div>
+          {addons.length === 0 ? (
+            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              {language === "es" ? "Sin adicionales. Los adicionales suman tiempo y precio a un servicio." : "No add-ons yet. Add-ons add time and price to a service."}
+            </p>
+          ) : (
+            <div className="rounded-xl overflow-hidden card-elevated">
+              {addons.map((a, i) => (
+                <button
+                  key={a.id}
+                  onClick={() => setAddonEditor({ open: true, addon: a })}
+                  className="w-full flex items-center justify-between px-3 py-2 text-left"
+                  style={{ borderBottom: i < addons.length - 1 ? "1px solid var(--border-color, rgba(127,127,127,0.2))" : undefined }}
+                >
+                  <div>
+                    <p className="text-sm font-medium">{a.name}</p>
+                    <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                      {a.barber_id ? (barbers.find((b) => b.id === a.barber_id)?.name ?? "") : (language === "es" ? "Todos los barberos" : "All barbers")}
+                    </p>
+                  </div>
+                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    +{a.duration_minutes} min · ${(a.price_cents / 100).toFixed(2)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

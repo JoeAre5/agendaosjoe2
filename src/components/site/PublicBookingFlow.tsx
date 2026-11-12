@@ -42,6 +42,9 @@ import { PaymentStep } from "@/components/site/booking/PaymentStep";
 import { ProductsStep, type ProductCart, type ProductLineItem } from "@/components/site/booking/ProductsStep";
 import { normalizePhone10 } from "@/lib/phone";
 
+// Ids are Acuity numbers on Acuity shops and local uuids on native shops.
+type CatalogId = number | string;
+
 /* ───────── Draft persistence (30-min TTL) ─────────
    Survives accidental close, tab switch, Safari background, refresh.
    Persists the FORM (selections + contact) but NEVER the payment step —
@@ -55,7 +58,7 @@ interface PersistedDraft {
   step: Step;
   selectedCal: Calendar | null;
   selectedService: Service | null;
-  selectedAddons: number[];
+  selectedAddons: CatalogId[];
   productCart: ProductCart;
   selectedDateIso: string;
   selectedTime: string | null;
@@ -93,23 +96,23 @@ function clearDraft() {
 
 /* ───────── Types ───────── */
 interface Calendar {
-  id: number;
+  id: CatalogId;
   name: string;
   avatarUrl: string | null;
   barberId: string | null;
 }
 interface Service {
-  id: number;
+  id: CatalogId;
   name: string;
   duration: number;
   price: string;
   category: string;
   description: string;
-  calendarIDs: number[];
-  addonIDs: number[];
+  calendarIDs: CatalogId[];
+  addonIDs: CatalogId[];
 }
 interface Addon {
-  id: number;
+  id: CatalogId;
   name: string;
   duration: number;
   price: string;
@@ -145,7 +148,7 @@ export function PublicBookingFlow() {
   // Selections
   const [selectedCal, setSelectedCal] = useState<Calendar | null>(null);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [selectedAddons, setSelectedAddons] = useState<number[]>([]);
+  const [selectedAddons, setSelectedAddons] = useState<CatalogId[]>([]);
   const [productCart, setProductCart] = useState<ProductCart>({});
   const [productLineItems, setProductLineItems] = useState<ProductLineItem[]>([]);
   const [productsTotalCents, setProductsTotalCents] = useState(0);

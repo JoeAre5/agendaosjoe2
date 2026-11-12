@@ -346,7 +346,7 @@ export type Database = {
       appointments: {
         Row: {
           acuity_client_id: number | null
-          acuity_id: number
+          acuity_id: number | null
           addons: string[] | null
           amount_paid_cents: number
           applied_benefit_redemption_id: string | null
@@ -399,7 +399,7 @@ export type Database = {
         }
         Insert: {
           acuity_client_id?: number | null
-          acuity_id: number
+          acuity_id?: number | null
           addons?: string[] | null
           amount_paid_cents?: number
           applied_benefit_redemption_id?: string | null
@@ -452,7 +452,7 @@ export type Database = {
         }
         Update: {
           acuity_client_id?: number | null
-          acuity_id?: number
+          acuity_id?: number | null
           addons?: string[] | null
           amount_paid_cents?: number
           applied_benefit_redemption_id?: string | null
@@ -1386,12 +1386,12 @@ export type Database = {
           addon_ids: number[] | null
           applied_benefit_redemption_id: string | null
           appointment_id: string | null
-          appointment_type_id: number
+          appointment_type_id: number | null
           ath_auth_token: string | null
           ath_ecommerce_id: string | null
           barber_id: string | null
           benefit_discount_cents: number
-          calendar_id: number
+          calendar_id: number | null
           claimed_at: string | null
           claimed_by: string | null
           client_id: string | null
@@ -1427,12 +1427,12 @@ export type Database = {
           addon_ids?: number[] | null
           applied_benefit_redemption_id?: string | null
           appointment_id?: string | null
-          appointment_type_id: number
+          appointment_type_id?: number | null
           ath_auth_token?: string | null
           ath_ecommerce_id?: string | null
           barber_id?: string | null
           benefit_discount_cents?: number
-          calendar_id: number
+          calendar_id?: number | null
           claimed_at?: string | null
           claimed_by?: string | null
           client_id?: string | null
@@ -1468,12 +1468,12 @@ export type Database = {
           addon_ids?: number[] | null
           applied_benefit_redemption_id?: string | null
           appointment_id?: string | null
-          appointment_type_id?: number
+          appointment_type_id?: number | null
           ath_auth_token?: string | null
           ath_ecommerce_id?: string | null
           barber_id?: string | null
           benefit_discount_cents?: number
-          calendar_id?: number
+          calendar_id?: number | null
           claimed_at?: string | null
           claimed_by?: string | null
           client_id?: string | null
@@ -4737,7 +4737,7 @@ export type Database = {
       }
       service_addons: {
         Row: {
-          acuity_addon_id: number
+          acuity_addon_id: number | null
           barber_id: string | null
           created_at: string
           duration_minutes: number
@@ -4749,7 +4749,7 @@ export type Database = {
           shop_id: string | null
         }
         Insert: {
-          acuity_addon_id: number
+          acuity_addon_id?: number | null
           barber_id?: string | null
           created_at?: string
           duration_minutes?: number
@@ -4761,7 +4761,7 @@ export type Database = {
           shop_id?: string | null
         }
         Update: {
-          acuity_addon_id?: number
+          acuity_addon_id?: number | null
           barber_id?: string | null
           created_at?: string
           duration_minutes?: number
@@ -4791,7 +4791,7 @@ export type Database = {
       }
       services: {
         Row: {
-          acuity_type_id: number
+          acuity_type_id: number | null
           addon_ids: number[] | null
           barber_id: string | null
           category: string | null
@@ -4814,7 +4814,7 @@ export type Database = {
           sort_order: number
         }
         Insert: {
-          acuity_type_id: number
+          acuity_type_id?: number | null
           addon_ids?: number[] | null
           barber_id?: string | null
           category?: string | null
@@ -4837,7 +4837,7 @@ export type Database = {
           sort_order?: number
         }
         Update: {
-          acuity_type_id?: number
+          acuity_type_id?: number | null
           addon_ids?: number[] | null
           barber_id?: string | null
           category?: string | null

@@ -27,11 +27,11 @@ export interface OccurrenceAvailability {
 
 interface CheckParams {
   dates: Date[];
-  appointmentTypeId: number;
-  calendarId: number;
+  appointmentTypeId: number | string;
+  calendarId: number | string;
   barberId: string;
   durationMinutes: number;
-  /** Acuity fetcher injected by caller (already auth'd). */
+  /** Scheduling fetcher injected by caller (already auth'd; Acuity or native). */
   acuityProxy: (path: string, method?: string, body?: any) => Promise<any>;
 }
 

@@ -11,7 +11,7 @@ interface BookingRuleRow {
 
 interface ServiceMapping {
   id: string;
-  acuity_type_id: number;
+  acuity_type_id: number | null;
   name: string;
 }
 
@@ -22,7 +22,7 @@ interface ServiceMapping {
  */
 export function useBookingRules() {
   const [globalRule, setGlobalRule] = useState<BookingRuleRow | null>(null);
-  const [serviceRules, setServiceRules] = useState<(BookingRuleRow & { acuity_type_id: number })[]>([]);
+  const [serviceRules, setServiceRules] = useState<(BookingRuleRow & { acuity_type_id: number | null })[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -43,27 +43,30 @@ export function useBookingRules() {
       const global = rules.find((r) => r.scope === "global") || null;
       setGlobalRule(global);
 
-      // Map service-scoped rules to acuity_type_id
+      // Map service-scoped rules to acuity_type_id (native services have none: keyed by id)
       const svcRules = rules
         .filter((r) => r.scope === "service" && r.service_id)
         .map((r) => {
           const svc = services.find((s) => s.id === r.service_id);
-          return svc ? { ...r, acuity_type_id: svc.acuity_type_id } : null;
+          return svc ? { ...r, acuity_type_id: svc.acuity_type_id ?? null } : null;
         })
-        .filter(Boolean) as (BookingRuleRow & { acuity_type_id: number })[];
+        .filter(Boolean) as (BookingRuleRow & { acuity_type_id: number | null })[];
 
       setServiceRules(svcRules);
       setLoaded(true);
     })();
   }, []);
 
-  /** Get effective min_advance_minutes for a given Acuity type ID */
+  /** Effective min_advance_minutes for a service: Acuity type id, or services.id (native). */
   const getMinAdvance = useCallback(
-    (acuityTypeId: number | null): number => {
-      if (acuityTypeId) {
-        const svcRule = serviceRules.find((r) => r.acuity_type_id === acuityTypeId);
+    (serviceKey: number | string | null): number => {
+      if (serviceKey !== null && serviceKey !== undefined && serviceKey !== "") {
+        const svcRule = serviceRules.find(
+          (r) => r.service_id === String(serviceKey) || (r.acuity_type_id !== null && String(r.acuity_type_id) === String(serviceKey)),
+        );
         if (svcRule) return svcRule.min_advance_minutes;
       }
+      // No rules row: the booking_rules column default, kept at the Acuity-era default.
       return globalRule?.min_advance_minutes ?? 120;
     },
     [globalRule, serviceRules]

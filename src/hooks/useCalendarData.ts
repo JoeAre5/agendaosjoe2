@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { startOfWeek, endOfWeek, addWeeks, addDays, format, parse, isValid } from "date-fns";
 import { writePersistent, readPersistent } from "@/lib/persistentState";
+import { getShopProvider } from "@/lib/scheduling";
 
 // Sync horizon: pull a wide window so reschedules outside the visible week
 // (e.g. moved months ahead in Acuity) still propagate to the local DB.
@@ -169,7 +170,7 @@ export function useCalendarData() {
       const today = new Date();
       const wideStart = format(addDays(today, -SYNC_PAST_DAYS), "yyyy-MM-dd");
       const wideEnd = format(addDays(today, SYNC_FUTURE_DAYS), "yyyy-MM-dd");
-      await supabase.functions.invoke("acuity-sync", {
+      if ((await getShopProvider()).kind !== "native") await supabase.functions.invoke("acuity-sync", {
         headers: { Authorization: `Bearer ${session.access_token}` },
         body: { minDate: wideStart, maxDate: wideEnd },
       });
@@ -205,6 +206,8 @@ export function useCalendarData() {
     hasSynced.current = true;
 
     const syncAcuity = async () => {
+      // Native shops have nothing to pull from Acuity.
+      if ((await getShopProvider()).kind === "native") return;
       setSyncing(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();

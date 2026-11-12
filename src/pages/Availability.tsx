@@ -8,7 +8,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { format, addMonths, subMonths, startOfMonth, getDaysInMonth, getDay, isSameDay, isToday, parseISO } from "date-fns";
 import { es, enUS } from "date-fns/locale";
-import { schedulingProxy as acuityProxy } from "@/lib/scheduling";
+import { schedulingProxy as acuityProxy, useShopProvider } from "@/lib/scheduling";
+import { HoursEditor } from "@/components/scheduling/HoursEditor";
 
 /* ─── Barber colors ─── */
 const BARBER_COLORS: Record<string, string> = {
@@ -25,7 +26,7 @@ function getBarberColor(name: string): string {
   return "var(--accent-color)";
 }
 
-/* ─── Acuity proxy ─── */
+
 interface AcuityType {
   id: number;
   name: string;
@@ -53,6 +54,13 @@ export default function Availability() {
   const weekLabels = language === "es" ? WEEKDAY_LABELS_ES : WEEKDAY_LABELS_EN;
 
   const [calendars, setCalendars] = useState<AcuityCalendar[]>([]);
+
+  const { isNative } = useShopProvider();
+  // Stable reference: the editor reloads when the barber list changes, not on every render.
+  const hoursBarbers = useMemo(
+    () => calendars.map((cal) => ({ id: String((cal as { barberId?: string | null }).barberId ?? cal.id), name: cal.name, color: getBarberColor(cal.name) })),
+    [calendars],
+  );
   const [types, setTypes] = useState<AcuityType[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCalIdx, setSelectedCalIdx] = useState(0);
@@ -159,6 +167,21 @@ export default function Availability() {
         title={language === "es" ? "Disponibilidad" : "Availability"}
         onBack={() => navigate("/admin?tab=menu")}
       />
+
+      {/* Native scheduler: opening hours live here (shop envelope + per barber). */}
+      {isNative && (
+        <>
+          <HoursEditor
+            language={language === "es" ? "es" : "en"}
+            barbers={hoursBarbers}
+            canEditShop
+            editableBarberIds="all"
+          />
+          <p className="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
+            {language === "es" ? "Vista previa de disponibilidad" : "Availability preview"}
+          </p>
+        </>
+      )}
 
       {/* Barber tabs — unified SegmentedTabs */}
       {calendars.length > 0 && (
