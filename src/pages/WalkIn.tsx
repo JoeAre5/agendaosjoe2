@@ -25,7 +25,7 @@ import { BookingProgress, type BookingProgressChip } from "@/components/site/boo
 import { findMatchingClient, type ClientMatch } from "@/lib/clientMatching";
 import { SubpageHeader } from "@/components/SubpageHeader";
 import { ClientMatchConfirmDialog } from "@/components/ClientMatchConfirmDialog";
-import { schedulingProxy as acuityProxy } from "@/lib/scheduling";
+import { schedulingProxy as acuityProxy, calendarBarber } from "@/lib/scheduling";
 
 
 /* ─── types ─── */
@@ -47,6 +47,7 @@ function normalizeServiceName(n: string) { return n.toLowerCase().trim().replace
 function isAllowedService(n: string) { return ALLOWED_SERVICES.includes(normalizeServiceName(n)); }
 
 /* ─── acuity proxy ─── */
+
 type Step = "client" | "service" | "slot";
 
 /* ─── main component ─── */
@@ -103,19 +104,14 @@ export default function WalkIn() {
 
         if (clientsRes.data) setAllClients(clientsRes.data);
 
-        const barberByCalId: Record<number, { id: string; name: string; avatarUrl: string | null }> = {};
-        const barberByName: Record<string, { id: string; name: string; avatarUrl: string | null }> = {};
-        (barbersData.data || []).forEach((b: any) => {
-          const entry = { id: b.id, name: b.name, avatarUrl: b.avatar_url };
-          if (b.acuity_calendar_id) barberByCalId[b.acuity_calendar_id] = entry;
-          barberByName[b.name.toLowerCase().trim()] = entry;
-        });
+        const barberRows = (barbersData.data || []) as Array<{ id: string; name: string; avatar_url: string | null; acuity_calendar_id: number | null }>;
 
         if (Array.isArray(calsData)) {
           setCalendars(
             calsData.map((c: any) => {
-              const match = barberByCalId[c.id] || barberByName[c.name.toLowerCase().trim()] || null;
-              return { id: c.id, name: c.name, barberId: match?.id || null, avatarUrl: match?.avatarUrl || null, barberName: match?.name || c.name };
+              // Native calendars are barbers (barberId / id = barbers.id); Acuity ones map by calendar id, then name.
+              const match = calendarBarber(c, barberRows);
+              return { id: c.id, name: c.name, barberId: match?.id || null, avatarUrl: match?.avatar_url || null, barberName: match?.name || c.name };
             })
           );
         }
@@ -376,9 +372,14 @@ export default function WalkIn() {
         phone: phone.trim(),
         notes: "Walk-in",
         admin: true,
+        native: { clientId: selectedClientId || null, bookingSource: "walk_in" },
       });
 
-      if (apptData?.id) {
+      if (apptData?.provider === "native") {
+        // The native scheduler already wrote the appointments row.
+        setCreatedApptId(apptData.localId || apptData.id);
+        setShowSuccess(true);
+      } else if (apptData?.id) {
         // Claim ownership BEFORE the Acuity webhook lands so booking_source
         // stays 'walk_in' (our app gets credit) instead of being downgraded
         // to 'acuity_sync'. created_by_role doubles as a hint to the webhook.

@@ -24,7 +24,7 @@ import {
   DrawerFooter,
   DrawerClose,
 } from "@/components/ui/drawer";
-import { schedulingProxy as acuityProxy } from "@/lib/scheduling";
+import { schedulingProxy as acuityProxy, getShopProvider } from "@/lib/scheduling";
 
 interface BlockData {
   id: string;
@@ -44,6 +44,7 @@ interface BarberInfo {
   name: string;
   color: string | null;
 }
+
 
 export default function BlockTimeDetail() {
   const { id } = useParams<{ id: string }>();
@@ -83,8 +84,8 @@ export default function BlockTimeDetail() {
     if (!block) return;
     setDeleting(true);
     try {
-      // Delete from Acuity if we have the acuity_block_id
-      if (block.acuity_block_id) {
+      // Delete from Acuity if we have the acuity_block_id (Acuity shops only)
+      if (block.acuity_block_id && (await getShopProvider()).kind !== "native") {
         try {
           await acuityProxy(`/blocks/${block.acuity_block_id}`, "DELETE");
         } catch {

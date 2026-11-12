@@ -201,6 +201,7 @@ Deno.serve(async (req) => {
           serviceId, barberId, addonIds, startsAt,
           ignoreAdvanceRules: true,
           ignoreHours: !respect,
+          ignoreOverlap: body.allowOverlap === true,
           staff: true,
         });
         if (!check.ok) return jsonRes({ error: "slot_unavailable", reason: check.reason }, 409);
@@ -236,6 +237,8 @@ Deno.serve(async (req) => {
           _label: str(body.label),
           // Reserva de staff: servicios privados y barberos no reservables estan permitidos (el motor ya lo valido).
           _as_staff: true,
+          // "Reservar de todos modos": solo staff (esta accion ya lo exige); la cita queda overlap_exempt.
+          _allow_overlap: body.allowOverlap === true,
         });
         if (error || !data) {
           const e = nativeRpcError(error);
@@ -338,6 +341,7 @@ Deno.serve(async (req) => {
           excludeAppointmentId: row.id,
           ignoreAdvanceRules: caller.staff,
           ignoreHours: relaxed,
+          ignoreOverlap: caller.staff && body.allowOverlap === true,
           staff: caller.staff,
         });
         if (!check.ok) return jsonRes({ error: "slot_unavailable", reason: check.reason }, 409);
@@ -346,6 +350,7 @@ Deno.serve(async (req) => {
           _appointment_id: row.id,
           _starts_at: check.startsAt,
           _barber_id: targetBarber,
+          _allow_overlap: caller.staff && body.allowOverlap === true,
         });
         if (error || !data) {
           const e = nativeRpcError(error);

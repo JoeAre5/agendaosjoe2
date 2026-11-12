@@ -63,7 +63,7 @@ import RecurringScopeDialog, { type RecurringScope } from "@/components/Recurrin
 import RecurringProgressModal, { type ProgressAction } from "@/components/RecurringProgressModal";
 import PayQrSheet from "@/components/admin/PayQrSheet";
 import SavedCardChargeSheet from "@/components/admin/SavedCardChargeSheet";
-import { schedulingProxy as acuityProxy, appointmentRef } from "@/lib/scheduling";
+import { schedulingProxy as acuityProxy, appointmentRef, getShopProvider, useShopProvider } from "@/lib/scheduling";
 
 /* ─── barber identity colors ─── */
 const BARBER_COLORS: Record<string, string> = {
@@ -91,22 +91,22 @@ interface AcuityTimeSlot {
 }
 
 interface AcuityType {
-  id: number;
+  id: number | string;
   name: string;
   duration: number;
   price: string;
-  calendarIDs: number[];
+  calendarIDs: (number | string)[];
   category: string;
-  addonIDs: number[];
+  addonIDs: (number | string)[];
 }
 
 interface AcuityCalendar {
-  id: number;
+  id: number | string;
   name: string;
 }
 
 interface AcuityAddon {
-  id: number;
+  id: number | string;
   name: string;
   duration: number;
   price: string;
@@ -122,6 +122,7 @@ export default function AppointmentDetail() {
 
   // Data
   const [appt, setAppt] = useState<any>(null);
+  const { isNative } = useShopProvider();
   const [acuityData, setAcuityData] = useState<any>(null);
   const [barber, setBarber] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -209,7 +210,7 @@ export default function AppointmentDetail() {
   const [editCalendars, setEditCalendars] = useState<AcuityCalendar[]>([]);
   const [editAllAddons, setEditAllAddons] = useState<AcuityAddon[]>([]);
   const [editSelectedService, setEditSelectedService] = useState<AcuityType | null>(null);
-  const [editSelectedAddons, setEditSelectedAddons] = useState<number[]>([]);
+  const [editSelectedAddons, setEditSelectedAddons] = useState<(number | string)[]>([]);
   const [editLoadingServices, setEditLoadingServices] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editMethodOpen, setEditMethodOpen] = useState(false);
@@ -292,6 +293,7 @@ export default function AppointmentDetail() {
     const isBulkRecurringEdit = targets.length > 1;
 
     let okCount = 0;
+    const nativeNow = (await getShopProvider()).kind === "native";
     try {
       for (let i = 0; i < targets.length; i++) {
         const target = targets[i];
@@ -301,7 +303,7 @@ export default function AppointmentDetail() {
             addonIDs: editSelectedAddons,
           };
           if (isBulkRecurringEdit) putBody.noEmail = true;
-          const result = await acuityProxy(`/appointments/${appointmentRef(target, false)}`, "PUT", putBody);
+          const result = await acuityProxy(`/appointments/${appointmentRef(target, nativeNow)}`, "PUT", putBody);
 
           // For synthetic IDs, result is null — fall back to chosen service values
           const newDuration = result?.duration || editSelectedService.duration;
@@ -312,7 +314,9 @@ export default function AppointmentDetail() {
 
           await supabase.from("appointments").update({
             service_name: newServiceName,
-            service_id: editSelectedService.id,
+            // Acuity type id (integer) or, on native shops, the services.id uuid
+            service_id: typeof editSelectedService.id === "number" ? editSelectedService.id : null,
+            ...(typeof editSelectedService.id === "string" ? { service_ref_id: editSelectedService.id } : {}),
             duration_minutes: newDuration,
             price_cents: newPriceCents,
             addons: addonNames,
@@ -414,9 +418,10 @@ export default function AppointmentDetail() {
         .maybeSingle();
       if (barberRow) setBarber(barberRow);
 
-      // Get Acuity data
+      // Get provider data (Acuity, or the native row shaped the same way)
       try {
-        const acuity = await acuityProxy(`/appointments/${appointmentRef(row, false)}`);
+        const nativeNow = (await getShopProvider()).kind === "native";
+        const acuity = await acuityProxy(`/appointments/${appointmentRef(row, nativeNow)}`);
         setAcuityData(acuity);
       } catch {
         // non-blocking
@@ -548,9 +553,10 @@ export default function AppointmentDetail() {
     try {
       const fullName = `${editClientFirstName.trim()} ${editClientLastName.trim()}`.trim();
 
-      // 1) Update in Acuity
-      if (appt.acuity_id) {
-        await acuityProxy(`/appointments/${appointmentRef(appt, false)}`, "PUT", {
+      // 1) Update in the scheduler (Acuity id, or the native row)
+      const nativeNow = (await getShopProvider()).kind === "native";
+      if (nativeNow || appt.acuity_id) {
+        await acuityProxy(`/appointments/${appointmentRef(appt, nativeNow)}`, "PUT", {
           firstName: editClientFirstName.trim(),
           lastName: editClientLastName.trim(),
           phone: editClientPhone.trim(),
@@ -623,7 +629,8 @@ export default function AppointmentDetail() {
     if (!appt) return;
     setSavingNotes(true);
     try {
-      await acuityProxy(`/appointments/${appointmentRef(appt, false)}`, "PUT", { notes: notesValue });
+      const nativeNow = (await getShopProvider()).kind === "native";
+      if (nativeNow || appt.acuity_id) await acuityProxy(`/appointments/${appointmentRef(appt, nativeNow)}`, "PUT", { notes: notesValue });
       await supabase.from("appointments").update({ notes: notesValue }).eq("id", appt.id);
       setAppt((prev: any) => ({ ...prev, notes: notesValue }));
       setEditingNotes(false);
@@ -909,6 +916,7 @@ export default function AppointmentDetail() {
     }
 
     let okCount = 0;
+    const nativeNow = (await getShopProvider()).kind === "native";
     try {
       for (let i = 0; i < targets.length; i++) {
         const target = targets[i];
@@ -933,7 +941,7 @@ export default function AppointmentDetail() {
           const body: any = { datetime: datetimeIso, admin: true };
           // Force noEmail on bulk recurring reschedules to prevent inbox spam
           if (!sendRescheduleEmail || targets.length > 1) body.noEmail = true;
-          const result = await acuityProxy(`/appointments/${appointmentRef(target, false)}/reschedule`, "PUT", body);
+          const result = await acuityProxy(`/appointments/${appointmentRef(target, nativeNow)}/reschedule`, "PUT", body);
 
           // For synthetic IDs, acuityProxy returns null — compute new times locally
           const newStartIso = result?.datetime || datetimeIso;
@@ -1028,19 +1036,24 @@ export default function AppointmentDetail() {
     }
 
     let okCount = 0;
+    const nativeNow = (await getShopProvider()).kind === "native";
     try {
       if (targets.length > 1) {
-        const acuityIds = targets
-          .map((target) => target.acuity_id)
-          .filter((id): id is number => typeof id === "number" && !isSyntheticAcuityId(id));
+        const acuityIds = nativeNow
+          ? []
+          : targets
+            .map((target) => target.acuity_id)
+            .filter((id): id is number => typeof id === "number" && !isSyntheticAcuityId(id));
+        // Native shops: the bulk tool takes the local ids.
+        const nativeIds = nativeNow ? targets.map((target) => target.id) : [];
 
-        if (acuityIds.length > 0) {
+        if (acuityIds.length > 0 || nativeIds.length > 0) {
           const { data, error } = await supabase.functions.invoke("cancel-appointments-bulk", {
-            body: { acuity_ids: acuityIds, reason: "Deleted from appointment detail" },
+            body: { acuity_ids: acuityIds, appointment_ids: nativeIds, reason: "Deleted from appointment detail" },
           });
           if (error) throw error;
           okCount += Number((data as any)?.localCancelled ?? (data as any)?.acuityCancelled ?? 0);
-          setProgressCurrent(acuityIds.length);
+          setProgressCurrent(acuityIds.length + nativeIds.length);
         }
 
         const syntheticTargets = targets.filter((target) => isSyntheticAcuityId(target.acuity_id));
@@ -1069,7 +1082,7 @@ export default function AppointmentDetail() {
           try {
             const cancelBody: any = { admin: true };
             if (targets.length > 1) cancelBody.noEmail = true;
-            await acuityProxy(`/appointments/${appointmentRef(target, false)}/cancel`, "PUT", cancelBody);
+            await acuityProxy(`/appointments/${appointmentRef(target, nativeNow)}/cancel`, "PUT", cancelBody);
           } catch (acuityErr) {
             console.warn("Acuity cancel failed (will still hard-delete locally)", target.id, acuityErr);
           }
@@ -1404,13 +1417,15 @@ export default function AppointmentDetail() {
                 if (appt.client_name) params.set("clientName", appt.client_name);
                 if (appt.client_phone) params.set("clientPhone", appt.client_phone);
                 if (appt.client_email) params.set("clientEmail", appt.client_email);
-                if (barber?.acuity_calendar_id) {
-                  params.set("ncal", String(barber.acuity_calendar_id));
+                const ncal = barber?.acuity_calendar_id ?? (isNative ? barber?.id : null);
+                if (ncal) {
+                  params.set("ncal", String(ncal));
                 }
                 // appt.service_id is the Acuity appointment type ID (stored directly,
                 // not a services.id FK). Pass it through as nsvc.
-                if (appt.service_id) {
-                  params.set("nsvc", String(appt.service_id));
+                const nsvc = appt.service_ref_id ?? appt.service_id;
+                if (nsvc) {
+                  params.set("nsvc", String(nsvc));
                 }
                 if (Array.isArray(appt.addons) && appt.addons.length > 0) {
                   params.set("naddonNames", appt.addons.join("|"));

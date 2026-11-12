@@ -21,8 +21,8 @@ import {
 } from "@/lib/recurrenceAvailability";
 
 interface AvailabilityCtx {
-  appointmentTypeId: number;
-  calendarId: number;
+  appointmentTypeId: number | string;
+  calendarId: number | string;
   barberId: string;
   durationMinutes: number;
   acuityProxy: (path: string, method?: string, body?: any) => Promise<any>;

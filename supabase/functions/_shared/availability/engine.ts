@@ -273,7 +273,7 @@ function fits(ctx: Ctx, bd: BarberDay, startMs: number, opts?: SlotCheckOptions,
   }
   const padded: Range = { s: startMs - ctx.padBeforeMs, e: endMs + ctx.padAfterMs };
   if (overlapsAny(padded, bd.blocks)) return { ok: false, reason: "blocked" };
-  if (overlapsAny(padded, bd.booked)) return { ok: false, reason: "overlap" };
+  if (!opts?.ignoreOverlap && overlapsAny(padded, bd.booked)) return { ok: false, reason: "overlap" };
   if (ctx.rules.maxPerDay != null && bd.appointmentsToday >= ctx.rules.maxPerDay) {
     return { ok: false, reason: "max_per_day" };
   }

@@ -108,4 +108,6 @@ export interface SlotCheckOptions {
   ignoreAdvanceRules?: boolean;
   /** Staff bookings: allow a time outside the working / shop hours. */
   ignoreHours?: boolean;
+  /** Staff "book anyway": do not reject a start that overlaps another appointment or hold. */
+  ignoreOverlap?: boolean;
 }

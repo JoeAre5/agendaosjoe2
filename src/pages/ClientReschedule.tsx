@@ -12,7 +12,8 @@ import {
 import { format, addDays, startOfWeek, isToday, isSameDay, isBefore, startOfDay, addMinutes, addMonths } from "date-fns";
 import { es, enUS } from "date-fns/locale";
 import { motion, AnimatePresence } from "motion/react";
-import { schedulingProxy as acuityProxy } from "@/lib/scheduling";
+import { schedulingProxy as acuityProxy, useShopProvider } from "@/lib/scheduling";
+
 
 interface AcuityTimeSlot { time: string; slotsAvailable: number; }
 
@@ -36,7 +37,9 @@ export default function ClientReschedule() {
 
   // Booking rules - service-aware via hook
   const { getMinAdvance, maxAdvanceDays: hookMaxDays, cancelWindowHours } = useBookingRules();
-  const minAdvanceMinutes = useMemo(() => getMinAdvance(serviceTypeId ? parseInt(serviceTypeId, 10) : null), [getMinAdvance, serviceTypeId]);
+  const minAdvanceMinutes = useMemo(() => getMinAdvance(serviceTypeId || null), [getMinAdvance, serviceTypeId]);
+  const { provider } = useShopProvider();
+  const isNative: boolean | null = provider ? provider.kind === "native" : null;
   const maxAdvanceDays = hookMaxDays;
 
   // Reschedule window enforcement (uses same window as cancel)
@@ -76,16 +79,19 @@ export default function ClientReschedule() {
     return dayEnd >= startOfDay(minDate) && day <= maxDate;
   }, [minDate, maxDate]);
 
-  // Load calendar ID from barber
+  // Load calendar ID from barber (native shops: the barber id is the calendar)
   useEffect(() => {
     const init = async () => {
-      if (barberId) {
-        const { data } = await supabase.from("barbers_public").select("acuity_calendar_id").eq("id", barberId).single();
-        if (data?.acuity_calendar_id) setCalendarId(String(data.acuity_calendar_id));
+      if (!barberId || isNative === null) return;
+      if (isNative) {
+        setCalendarId(barberId);
+        return;
       }
+      const { data } = await supabase.from("barbers_public").select("acuity_calendar_id").eq("id", barberId).single();
+      if (data?.acuity_calendar_id) setCalendarId(String(data.acuity_calendar_id));
     };
     init();
-  }, [barberId]);
+  }, [barberId, isNative]);
 
   // Load available dates: BOTH selected date's month AND the month being browsed in picker.
   const reschedMonthsKey = useMemo(() => {
@@ -128,20 +134,25 @@ export default function ClientReschedule() {
   }, [serviceTypeId, calendarId, format(selectedDate, "yyyy-MM-dd"), minAdvanceMinutes]);
 
   const handleReschedule = async () => {
-    if (!selectedTime || !acuityId || !apptId || submitting) return;
+    if (!selectedTime || !apptId || submitting) return;
+    if (!isNative && !acuityId) return;
     setSubmitting(true);
     try {
-      const result = await acuityProxy(`/appointments/${acuityId}/reschedule`, "PUT", {
+      // Native shops: the local uuid identifies the appointment and the
+      // server updates the row itself; Acuity shops mirror the change below.
+      const result = await acuityProxy(`/appointments/${isNative ? apptId : acuityId}/reschedule`, "PUT", {
         datetime: selectedTime,
       });
-      if (result.error || result.status_code >= 400) throw new Error(result.message || "Error al reagendar");
+      if (result?.error || result?.status_code >= 400) throw new Error(result.message || "Error al reagendar");
 
-      const newEnd = new Date(new Date(selectedTime).getTime() + durationMin * 60_000).toISOString();
-      await supabase.from("appointments").update({
-        starts_at: selectedTime,
-        ends_at: newEnd,
-        status: "scheduled",
-      }).eq("id", apptId);
+      if (!isNative) {
+        const newEnd = new Date(new Date(selectedTime).getTime() + durationMin * 60_000).toISOString();
+        await supabase.from("appointments").update({
+          starts_at: selectedTime,
+          ends_at: newEnd,
+          status: "scheduled",
+        }).eq("id", apptId);
+      }
 
       // Fire-and-forget admin push notification
       supabase.functions.invoke("notify-owners-appointment", {

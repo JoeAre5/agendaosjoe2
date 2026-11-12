@@ -50,7 +50,7 @@ import RecurringScopeDialog, { type RecurringScope } from "@/components/Recurrin
 import RecurringProgressModal, { type ProgressAction } from "@/components/RecurringProgressModal";
 import { findMatchingClient, relinkAppointment, type ClientMatch } from "@/lib/clientMatching";
 import { ClientMatchConfirmDialog } from "@/components/ClientMatchConfirmDialog";
-import { schedulingProxy as acuityProxy, appointmentRef } from "@/lib/scheduling";
+import { schedulingProxy as acuityProxy, appointmentRef, getShopProvider, useShopProvider } from "@/lib/scheduling";
 
 /* ─── barber identity colors ─── */
 const BARBER_COLORS: Record<string, string> = {
@@ -279,12 +279,14 @@ export default function EditAppointment() {
 
   // Added service & add-ons (separate from the main service row)
   const [addedService, setAddedService] = useState<AcuityType | null>(null);
-  const [addedAddonIds, setAddedAddonIds] = useState<number[]>([]);
+  const [addedAddonIds, setAddedAddonIds] = useState<(number | string)[]>([]);
+  const { isNative } = useShopProvider();
 
   // Find calendar for a barber (by stable Acuity calendar ID)
   const findCalendarForBarber = useCallback((b: any): AcuityCalendar | null => {
-    if (!b?.acuity_calendar_id) return null;
-    return acuityCalendars.find((c) => c.id === b.acuity_calendar_id) || null;
+    if (!b) return null;
+    // Native calendars are barbers (id / barberId = barbers.id); Acuity ones map by calendar id.
+    return acuityCalendars.find((c: any) => c.id === b.id || c.barberId === b.id || (b.acuity_calendar_id && c.id === b.acuity_calendar_id)) || null;
   }, [acuityCalendars]);
 
   // Services filtered by the active calendar context (addServiceCalendar overrides editCalendar)
@@ -514,10 +516,11 @@ export default function EditAppointment() {
         setEditBarber(b);
       }
 
-      // Load Acuity data + local DB services
+      // Load scheduler data (Acuity, or the native rows shaped the same way) + local DB services
+      const nativeNow = (await getShopProvider()).kind === "native";
       try {
         const [acuity, typesData, calsData, addonsData, dbSvcRes] = await Promise.all([
-          acuityProxy(`/appointments/${appointmentRef(a, false)}`),
+          acuityProxy(`/appointments/${appointmentRef(a, nativeNow)}`),
           acuityProxy("/appointment-types"),
           acuityProxy("/calendars"),
           acuityProxy("/appointment-addons"),
@@ -755,6 +758,7 @@ export default function EditAppointment() {
     const isBulkRecurring = targets.length > 1;
 
     try {
+      const nativeNow = (await getShopProvider()).kind === "native";
       for (let i = 0; i < targets.length; i++) {
         const target = targets[i];
         try {
@@ -808,7 +812,7 @@ export default function EditAppointment() {
           if (notesChanged) acuityBody.notes = notesValue;
           if (isBulkRecurring) acuityBody.noEmail = true;
           if (Object.keys(acuityBody).length > 1) {
-            await acuityProxy(`/appointments/${appointmentRef(target, false)}`, "PUT", acuityBody);
+            await acuityProxy(`/appointments/${appointmentRef(target, nativeNow)}`, "PUT", acuityBody);
           }
 
           // Reschedule (compute the matching datetime per occurrence so siblings keep their date and just shift time-of-day if changed)
@@ -845,7 +849,7 @@ export default function EditAppointment() {
                   continue;
                 }
               }
-              const result = await acuityProxy(`/appointments/${appointmentRef(target, false)}/reschedule`, "PUT", rescheduleBody);
+              const result = await acuityProxy(`/appointments/${appointmentRef(target, nativeNow)}/reschedule`, "PUT", rescheduleBody);
               const durationMs = finalDuration * 60000;
               newStartsAt = result?.datetime || new Date(perTargetDatetime).toISOString();
               newEndsAt = new Date(new Date(newStartsAt).getTime() + durationMs).toISOString();
@@ -868,7 +872,9 @@ export default function EditAppointment() {
             client_id: pendingRelinkRef.current?.clientId || target.client_id,
             barber_id: editBarber?.id || target.barber_id,
             service_name: editService?.name || target.service_name,
-            service_id: editService?.id || target.service_id,
+            // Acuity type id (integer) or, on native shops, the services.id uuid
+            service_id: typeof editService?.id === "number" ? editService.id : (editService ? null : target.service_id),
+            ...(typeof editService?.id === "string" ? { service_ref_id: editService.id } : {}),
             duration_minutes: finalDuration,
             edit_line_items: targetItems ? JSON.parse(JSON.stringify(targetItems)) : target.edit_line_items,
             price_cents: finalPriceCents,
@@ -1555,7 +1561,7 @@ export default function EditAppointment() {
                 ? "Al cambiar el barbero, toda la cita (servicio, precio, hora, cliente) se migra a su calendario — aunque el servicio no esté asignado a ese barbero en Acuity."
                 : "Changing the barber migrates the entire appointment (service, price, time, client) to their calendar — even if the service isn't normally assigned to that barber in Acuity."}
             </p>
-            {allBarbers.filter((b) => b.acuity_calendar_id).map((b) => {
+            {allBarbers.filter((b) => b.acuity_calendar_id || isNative).map((b) => {
               const isSelected = editBarber?.id === b.id;
               const bc = b.color || getBarberColor(b.name);
               return (

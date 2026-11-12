@@ -246,6 +246,7 @@ export interface SlotCheckQuery extends AvailabilityQuery {
   excludeDraftId?: string | null;
   ignoreAdvanceRules?: boolean;
   ignoreHours?: boolean;
+  ignoreOverlap?: boolean;
 }
 
 /**
@@ -271,6 +272,7 @@ export async function nativeCheckSlot(admin: Client, shopId: string, q: SlotChec
   const check: SlotCheck = checkSlot(loaded.input, q.barberId, q.startsAt, {
     ignoreAdvanceRules: q.ignoreAdvanceRules,
     ignoreHours: q.ignoreHours,
+    ignoreOverlap: q.ignoreOverlap,
   });
   return { check, ...loaded };
 }

@@ -31,7 +31,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
-import { schedulingProxy as acuityProxy } from "@/lib/scheduling";
+import { schedulingProxy as acuityProxy, getShopProvider } from "@/lib/scheduling";
 
 interface BarberRow {
   id: string;
@@ -39,6 +39,7 @@ interface BarberRow {
   color: string | null;
   acuity_calendar_id: number | null;
 }
+
 
 export default function NewBlockTime() {
   const navigate = useNavigate();
@@ -142,6 +143,8 @@ export default function NewBlockTime() {
     if (!canSubmit) return;
     setSubmitting(true);
     let acuityFailed = false;
+    // Native shops keep blocks only in this database: no Acuity leg at all.
+    const isNative = (await getShopProvider()).kind === "native";
     try {
       const barberIds = Array.from(selectedBarbers);
 
@@ -154,8 +157,8 @@ export default function NewBlockTime() {
           const isSingle = isSameDay(date, endDate);
 
           let acuityBlockId: number | null = null;
-          if (!barber?.acuity_calendar_id) acuityFailed = true;
-          if (barber?.acuity_calendar_id) {
+          if (!isNative && !barber?.acuity_calendar_id) acuityFailed = true;
+          if (!isNative && barber?.acuity_calendar_id) {
             try {
               const resp = await acuityProxy("/blocks", "POST", {
                 calendarID: barber.acuity_calendar_id,
@@ -201,8 +204,8 @@ export default function NewBlockTime() {
           const endStr = `${endDateStr}T${endTime}`;
 
           let acuityBlockId: number | null = null;
-          if (!barber?.acuity_calendar_id) acuityFailed = true;
-          if (barber?.acuity_calendar_id) {
+          if (!isNative && !barber?.acuity_calendar_id) acuityFailed = true;
+          if (!isNative && barber?.acuity_calendar_id) {
             try {
               if (isEdit) {
                 // Look up the existing acuity_block_id (we may not have it locally)

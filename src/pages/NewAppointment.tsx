@@ -70,19 +70,19 @@ import { ProductsStep, type ProductCart } from "@/components/site/booking/Produc
 
 /* ─── helpers ─── */
 interface AcuityType {
-  id: number;
+  id: number | string;
   name: string;
   duration: number;
   price: string;
   color: string;
-  calendarIDs: number[];
+  calendarIDs: (number | string)[];
   category: string;
-  addonIDs: number[];
+  addonIDs: (number | string)[];
   description: string;
   private?: boolean;
 }
 
-interface AcuityCalendar { id: number; name: string; email?: string; avatarUrl?: string | null; barberId?: string | null; }
+interface AcuityCalendar { id: number | string; name: string; email?: string; avatarUrl?: string | null; barberId?: string | null; }
 interface AcuityTimeSlot { time: string; slotsAvailable: number; }
 interface AcuityAddon { id: number; name: string; duration: number; price: string; }
 
@@ -104,7 +104,7 @@ type Step = "barber" | "service" | "addons" | "datetime" | "summary";
 
 /* ─── Custom time helpers ─── */
 import { getShopTimezone, getShopNextSlot, toAcuityDatetimeInTz } from "@/lib/timezone";
-import { schedulingProxy as acuityProxy, appointmentRef } from "@/lib/scheduling";
+import { schedulingProxy as acuityProxy, appointmentRef, calendarBarber, getShopProvider } from "@/lib/scheduling";
 
 function buildCustomDatetime(date: Date, hours: number, minutes: number, tz: string): string {
   // Interpret wall-clock components in the shop's timezone, emit Acuity-format ISO with correct offset.
@@ -182,7 +182,7 @@ export default function NewAppointment() {
   const [selectedType, setSelectedType] = useState<AcuityType | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [selectedAddons, setSelectedAddons] = useState<number[]>([]);
+  const [selectedAddons, setSelectedAddons] = useState<(number | string)[]>([]);
   const [notes, setNotes] = useState("");
   const [sendConfirmation, setSendConfirmation] = useState(true);
 
@@ -271,7 +271,8 @@ export default function NewAppointment() {
   const [progressTotal, setProgressTotal] = useState(0);
 
   // Edit mode state
-  const [editAcuityId, setEditAcuityId] = useState<number | null>(null);
+  // Acuity id on Acuity shops; the local uuid on native shops (see appointmentRef).
+  const [editAcuityId, setEditAcuityId] = useState<number | string | null>(null);
   const [editSupabaseId, setEditSupabaseId] = useState<string | null>(null);
 
   // Edit client drawer state
@@ -341,7 +342,7 @@ export default function NewAppointment() {
         if (Array.isArray(calsData)) {
           const barberAvatars = barbersRes.data || [];
           setCalendars(calsData.map((cal: AcuityCalendar) => {
-            const match = barberAvatars.find((b) => b.acuity_calendar_id === cal.id);
+            const match = calendarBarber(cal, barberAvatars);
             return { ...cal, avatarUrl: match?.avatar_url || null, barberId: match?.id || null };
           }));
         }
@@ -370,12 +371,13 @@ export default function NewAppointment() {
         if (!appt) { toast.error("Appointment not found"); navigate(backToCalendar(searchParams)); return; }
 
         setEditSupabaseId(appt.id);
-        setEditAcuityId(appt.acuity_id);
+        const nativeNow = (await getShopProvider()).kind === "native";
+        setEditAcuityId(appointmentRef(appt, nativeNow));
 
-        // Fetch acuity data for full details
+        // Fetch scheduler data for full details (Acuity, or the native row shaped the same way)
         let acuityData: any = null;
         try {
-          acuityData = await acuityProxy(`/appointments/${appointmentRef(appt, false)}`, "GET");
+          acuityData = await acuityProxy(`/appointments/${appointmentRef(appt, nativeNow)}`, "GET");
         } catch { /* non-blocking */ }
 
         // Match calendar (barber)
@@ -501,10 +503,10 @@ export default function NewAppointment() {
     if (calendars.length === 0) return;
 
     // Calendar
+    // ncal / nsvc are Acuity ids on Acuity shops and uuids on native shops.
     let cal: AcuityCalendar | null = null;
     if (calParam) {
-      const calId = parseInt(calParam, 10);
-      cal = calendars.find((c) => c.id === calId) || null;
+      cal = calendars.find((c) => String(c.id) === calParam || c.barberId === calParam) || null;
       if (cal) setSelectedCalendar(cal);
     }
 
@@ -514,14 +516,13 @@ export default function NewAppointment() {
     // strict calendar-binding check so picker stays consistent.
     let svc: AcuityType | null = null;
     if (svcParam && cal) {
-      const svcId = parseInt(svcParam, 10);
       const isRepeatFlow = searchParams.get("nautobook") === "1";
       svc = isRepeatFlow
-        ? (services.find((s) => s.id === svcId) || null)
-        : (services.find((s) => s.id === svcId && s.calendarIDs?.includes(cal!.id)) || null);
+        ? (services.find((s) => String(s.id) === svcParam) || null)
+        : (services.find((s) => String(s.id) === svcParam && s.calendarIDs?.includes(cal!.id)) || null);
       if (svc) {
         setSelectedType(svc);
-      } else if (svcId >= 0) {
+      } else if (!/^-\d+$/.test(svcParam)) {
         toast.info(language === "es" ? "Servicio no disponible" : "Service unavailable");
       }
     }
@@ -625,7 +626,7 @@ export default function NewAppointment() {
     const barberId = selectedCalendar.barberId;
 
     // Build override map for this barber
-    const overrides = new Map<number, DbService>();
+    const overrides = new Map<number | string, DbService>();
     if (barberId) {
       for (const ds of dbServices) {
         if (ds.barber_id === barberId) overrides.set(ds.acuity_type_id, ds);
@@ -656,7 +657,7 @@ export default function NewAppointment() {
   }, [services, dbServices, selectedCalendar]);
 
   // Helper: is the selected service local-only (lives in our DB, not Acuity)?
-  const isLocalService = (svc: AcuityType | null) => !!svc && svc.id < 0;
+  const isLocalService = (svc: AcuityType | null) => !!svc && typeof svc.id === "number" && svc.id < 0;
 
   /* ─── Available add-ons list filtered by selected type ─── */
   // Reset of selectedAddons + auto-skip happen inline at the setSelectedType setter
@@ -984,7 +985,8 @@ export default function NewAppointment() {
           client_phone: clientPhone.trim() || null,
           client_id: clientIdLocal,
           service_name: selectedType!.name,
-          service_id: selectedType!.id, // negative synthetic id
+          service_id: typeof selectedType!.id === "number" ? selectedType!.id : null, // negative synthetic id
+          ...(typeof selectedType!.id === "string" ? { service_ref_id: selectedType!.id } : {}),
           addons: [],
           starts_at: startsAt,
           ends_at: endsAt,
@@ -1020,13 +1022,15 @@ export default function NewAppointment() {
         };
         if (!sendConfirmation) updateBody.noEmail = true;
 
-        if (skipConflictCheck) {
+        // Acuity keys the overlap authorization by its numeric id; native shops send it with the request.
+        if (skipConflictCheck && typeof editAcuityId === "number") {
           await authorizeStaffOverlap(editAcuityId, "Staff confirmed book anyway (reschedule)");
         }
         acuityResult = await acuityProxy(`/appointments/${editAcuityId}/reschedule`, "PUT", {
           datetime: selectedTime,
           calendarID: selectedCalendar!.id,
           admin: true,
+          native: { allowOverlap: skipConflictCheck },
         });
         if (acuityResult.error || acuityResult.status_code >= 400) throw new Error(acuityResult.message || "Acuity reschedule failed");
 
@@ -1099,6 +1103,13 @@ export default function NewAppointment() {
             // Only recurring bulk creation should skip unavailable occurrences.
             // Single admin/barber appointments must keep the Acuity admin override.
             ...(shouldRespectAvailability ? { respectAvailability: true } : {}),
+            // Native scheduler only (stripped before anything reaches Acuity).
+            native: {
+              clientId: supabaseClientId || null,
+              recurringGroupId,
+              allowOverlap: skipConflictCheck || recurrencePattern?.overrideConflicts === true,
+              bookingSource: createdByRole === "barber" ? "barber_manual" : "admin_manual",
+            },
           };
           if (!sendConfirmation) appointmentBody.noEmail = true;
 
@@ -1140,10 +1151,12 @@ export default function NewAppointment() {
 
         // First created result drives the rest of the flow (client matching, navigation)
         acuityResult = createdAcuityResults[0];
+        // Native results are already persisted rows; only Acuity results need the local mirror below.
+        const needsMirror = createdAcuityResults.some((r) => r?.provider !== "native");
 
         // Find or create client in Supabase (once)
         let clientIdShared = supabaseClientId;
-        if (!clientIdShared) {
+        if (!clientIdShared && needsMirror) {
           clientIdShared = await findOrCreateClient({
             firstName: clientFirst,
             lastName: clientLast,
@@ -1156,10 +1169,12 @@ export default function NewAppointment() {
         // Match barber once (by stable Acuity calendar ID)
         const { data: barberRows } = await supabase.from("barbers_public").select("id, acuity_calendar_id").not("acuity_calendar_id", "is", null);
         const matchedBarber = barberRows?.find((b) => b.acuity_calendar_id === selectedCalendar!.id);
-        if (!matchedBarber?.id) throw new Error("Barber not found for calendar");
+        if (!matchedBarber?.id && needsMirror) throw new Error("Barber not found for calendar");
 
         // Upsert each created appointment, sharing recurring_group_id if applicable
         for (const r of createdAcuityResults) {
+          // Native shops: the server already wrote the appointment (no local Acuity mirror to create).
+          if (r?.provider === "native") continue;
           // Staff confirmed "Book anyway": authorize this slot to share time with others.
           if (skipConflictCheck || recurrencePattern?.overrideConflicts) {
             await authorizeStaffOverlap(r.id, "Staff confirmed book anyway");
@@ -1209,7 +1224,8 @@ export default function NewAppointment() {
       }
 
       // For edit mode (no recurring loop), upsert the single result here
-      if (isEditMode) {
+      // (native shops: the server already updated the row)
+      if (isEditMode && acuityResult?.provider !== "native") {
         // Find or create client in Supabase
         let clientId = supabaseClientId;
         if (!clientId) {
@@ -1249,7 +1265,9 @@ export default function NewAppointment() {
         if (editPersistError) throw editPersistError;
       }
 
-      const { data: createdAppt } = await supabase.from("appointments").select("id").eq("acuity_id", acuityResult.id).maybeSingle();
+      const createdAppt = acuityResult?.provider === "native"
+        ? { id: acuityResult.localId as string }
+        : (await supabase.from("appointments").select("id").eq("acuity_id", acuityResult.id).maybeSingle()).data;
       setCreatedAppointmentId(createdAppt?.id || null);
 
       if (isEditMode) {

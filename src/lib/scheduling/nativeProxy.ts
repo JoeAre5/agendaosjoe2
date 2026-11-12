@@ -95,6 +95,7 @@ export function translateAcuityRequest(path: string, method = "GET", body?: unkn
           notes: str(b.notes),
           respectAvailability: b.respectAvailability === true,
           noEmail: b.noEmail === true,
+          allowOverlap: native.allowOverlap === true,
           bookingSource: str(native.bookingSource) ?? "admin_manual",
           recurringGroupId: str(native.recurringGroupId),
           label: str(native.label),
@@ -121,6 +122,7 @@ export function translateAcuityRequest(path: string, method = "GET", body?: unkn
             barberId: str(b.calendarID),
             noEmail: b.noEmail === true,
             respectAvailability: b.respectAvailability === true,
+            allowOverlap: (b.native as Record<string, unknown> | undefined)?.allowOverlap === true,
           },
         },
       };

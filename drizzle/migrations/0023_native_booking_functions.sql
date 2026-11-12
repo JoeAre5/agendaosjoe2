@@ -50,7 +50,8 @@ CREATE OR REPLACE FUNCTION public.book_native_slot(
   _draft_id           uuid    DEFAULT NULL,        -- el borrador que se confirma: su propia reserva temporal se ignora
   _recurring_group_id uuid    DEFAULT NULL,
   _label              text    DEFAULT NULL,
-  _as_staff           boolean DEFAULT false        -- permite servicios privados y barberos no reservables
+  _as_staff           boolean DEFAULT false,       -- permite servicios privados y barberos no reservables
+  _allow_overlap      boolean DEFAULT false        -- solo staff: "reservar de todos modos" sobre otra cita (queda overlap_exempt)
 )
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
@@ -135,6 +136,7 @@ BEGIN
     SELECT 1 FROM public.appointments a
     WHERE a.barber_id = _barber_id AND a.status NOT IN ('cancelled', 'no_show') AND a.overlap_exempt = false
       AND a.starts_at < v_ends_at AND a.ends_at > _starts_at
+      AND NOT (coalesce(_allow_overlap, false) AND coalesce(_as_staff, false))
   ) THEN
     RAISE EXCEPTION 'slot_taken';
   END IF;
@@ -172,7 +174,7 @@ BEGIN
     payment_reference_id, stripe_payment_method_type,
     applied_benefit_redemption_id, benefit_discount_cents,
     notes, label, status, is_recurring, recurring_group_id,
-    created_by_role, created_by_user_id, booking_source
+    created_by_role, created_by_user_id, booking_source, overlap_exempt
   ) VALUES (
     _shop_id, NULL, _barber_id, v_client_id,
     btrim(v_first || ' ' || coalesce(v_last, '')),
@@ -192,7 +194,8 @@ BEGIN
     coalesce((_payment->>'benefit_discount_cents')::integer, 0),
     nullif(btrim(_notes), ''), nullif(btrim(_label), ''),
     'scheduled', _recurring_group_id IS NOT NULL, _recurring_group_id,
-    _created_by_role, _created_by_user_id, _booking_source
+    _created_by_role, _created_by_user_id, _booking_source,
+    coalesce(_allow_overlap, false) AND coalesce(_as_staff, false)
   )
   RETURNING * INTO v_row;
 
@@ -214,7 +217,8 @@ CREATE OR REPLACE FUNCTION public.reschedule_native_appointment(
   _appointment_id   uuid,
   _starts_at        timestamptz,
   _barber_id        uuid    DEFAULT NULL,
-  _duration_minutes integer DEFAULT NULL
+  _duration_minutes integer DEFAULT NULL,
+  _allow_overlap    boolean DEFAULT false        -- staff confirmo "reservar de todos modos"
 )
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
@@ -273,6 +277,7 @@ BEGIN
     WHERE a.barber_id = v_barber AND a.id <> _appointment_id
       AND a.status NOT IN ('cancelled', 'no_show') AND a.overlap_exempt = false
       AND a.starts_at < v_ends_at AND a.ends_at > _starts_at
+      AND NOT coalesce(_allow_overlap, false)
   ) THEN
     RAISE EXCEPTION 'slot_taken';
   END IF;
@@ -287,7 +292,8 @@ BEGIN
 
   UPDATE public.appointments
      SET starts_at = _starts_at, ends_at = v_ends_at, barber_id = v_barber,
-         duration_minutes = v_duration, updated_at = now()
+         duration_minutes = v_duration, updated_at = now(),
+         overlap_exempt = overlap_exempt OR coalesce(_allow_overlap, false)
    WHERE id = _appointment_id
   RETURNING * INTO v_appt;
 
@@ -340,10 +346,10 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.shop_booking_provider(uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.book_native_slot(uuid, uuid, uuid, timestamptz, jsonb, uuid[], text, text, text, uuid, jsonb, integer, uuid, uuid, text, boolean) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.reschedule_native_appointment(uuid, timestamptz, uuid, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.book_native_slot(uuid, uuid, uuid, timestamptz, jsonb, uuid[], text, text, text, uuid, jsonb, integer, uuid, uuid, text, boolean, boolean) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.reschedule_native_appointment(uuid, timestamptz, uuid, integer, boolean) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.cancel_native_appointment(uuid, text, text, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.shop_booking_provider(uuid) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.book_native_slot(uuid, uuid, uuid, timestamptz, jsonb, uuid[], text, text, text, uuid, jsonb, integer, uuid, uuid, text, boolean) TO service_role;
-GRANT EXECUTE ON FUNCTION public.reschedule_native_appointment(uuid, timestamptz, uuid, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.book_native_slot(uuid, uuid, uuid, timestamptz, jsonb, uuid[], text, text, text, uuid, jsonb, integer, uuid, uuid, text, boolean, boolean) TO service_role;
+GRANT EXECUTE ON FUNCTION public.reschedule_native_appointment(uuid, timestamptz, uuid, integer, boolean) TO service_role;
 GRANT EXECUTE ON FUNCTION public.cancel_native_appointment(uuid, text, text, uuid) TO service_role;

@@ -74,9 +74,9 @@ process.on("uncaughtException", e => { __flush(); console.log("EXCEPCION: " + St
 const T = (h, m = 0) => `2026-11-20T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00-04:00`;
 const book = async (barber, service, starts, extra = {}) => {
   try {
-    const r = await q(`SELECT public.book_native_slot($1,$2,$3,$4::timestamptz,$5::jsonb,$6::uuid[],$7,$8,NULL,NULL,$9::jsonb,$10,$11,NULL,NULL,$12) AS r`,
+    const r = await q(`SELECT public.book_native_slot($1,$2,$3,$4::timestamptz,$5::jsonb,$6::uuid[],$7,$8,NULL,NULL,$9::jsonb,$10,$11,NULL,NULL,$12,$13) AS r`,
       [shop.id, barber, service, starts, JSON.stringify(extra.client ?? { first_name: "Ana", last_name: "Prueba", phone: "7875550100" }), extra.addons ?? [], null,
-       extra.source ?? "admin_manual", JSON.stringify(extra.payment ?? {}), extra.price ?? null, extra.draft ?? null, extra.asStaff ?? false]);
+       extra.source ?? "admin_manual", JSON.stringify(extra.payment ?? {}), extra.price ?? null, extra.draft ?? null, extra.asStaff ?? false, extra.allowOverlap ?? false]);
     return { ok: true, row: r[0].r };
   } catch (e) { return { ok: false, msg: String(e.message) }; }
 };
@@ -147,7 +147,7 @@ const cL = await err("SELECT public.cancel_native_appointment($1::uuid)", [legac
 check("en tienda nativa, una cita heredada de Acuity SI se cancela por la via nativa", cL === null, cL);
 
 // 7. Reprogramar
-const resch = async (id, starts, barber = null, dur = null) => { try { return { ok: true, row: (await q(`SELECT public.reschedule_native_appointment($1,$2::timestamptz,$3,$4) AS r`, [id, starts, barber, dur]))[0].r }; } catch (e) { return { ok: false, msg: String(e.message) }; } };
+const resch = async (id, starts, barber = null, dur = null, allow = false) => { try { return { ok: true, row: (await q(`SELECT public.reschedule_native_appointment($1,$2::timestamptz,$3,$4,$5) AS r`, [id, starts, barber, dur, allow]))[0].r }; } catch (e) { return { ok: false, msg: String(e.message) }; } };
 let rr = await resch(firstId, T(11));
 check("reprogramar a horario libre", rr.ok, code(rr));
 if (rr.ok) check("la duracion y el precio se conservan al reprogramar", rr.row.duration_minutes === 60 && rr.row.price_cents === 5000, JSON.stringify([rr.row.duration_minutes, rr.row.price_cents]));
@@ -210,6 +210,28 @@ const back = (await q("SELECT public.switch_shop_to_acuity($1::uuid, NULL) AS r"
 check("switch_shop_to_acuity (reversa) vuelve a Acuity", back.success === true && (await q("SELECT booking_provider FROM shops WHERE id=$1", [shop2.id]))[0].booking_provider === "acuity");
 sw = await err("SELECT public.switch_shop_to_acuity($1::uuid)", [shop2.id]);
 check("la reversa solo vale desde nativo -> rollback_not_from_native", sw && sw.includes("rollback_not_from_native"), sw);
+
+// 8c. "Reservar de todos modos" (solape confirmado por el staff)
+const [bX] = await q("INSERT INTO barbers(shop_id, name) VALUES ($1,$2) RETURNING id", [shop.id, "Solape"]);
+const base = await book(bX.id, svc.id, T(18), { asStaff: true });
+check("cita base para probar solapes", base.ok, code(base));
+let ov = await book(bX.id, svc.id, T(18), { asStaff: true });
+check("solape sin confirmar -> slot_taken", !ov.ok && ov.msg.includes("slot_taken"), code(ov));
+ov = await book(bX.id, svc.id, T(18), { allowOverlap: true });
+check("allow_overlap sin ser staff se ignora -> slot_taken", !ov.ok && ov.msg.includes("slot_taken"), code(ov));
+ov = await book(bX.id, svc.id, T(18), { asStaff: true, allowOverlap: true });
+check("staff confirma solape -> se crea", ov.ok, code(ov));
+check("la cita solapada queda overlap_exempt", ov.ok && (await q("SELECT overlap_exempt FROM appointments WHERE id=$1", [ov.row.id]))[0].overlap_exempt === true);
+check("la cita base no cambia (overlap_exempt=false)", (await q("SELECT overlap_exempt FROM appointments WHERE id=$1", [base.row.id]))[0].overlap_exempt === false);
+const lone = await book(bX.id, svc.id, T(20), { asStaff: true });
+let mv2 = await resch(lone.row.id, T(18));
+check("reprogramar encima de otra sin confirmar -> slot_taken", !mv2.ok && mv2.msg.includes("slot_taken"), code(mv2));
+mv2 = await resch(lone.row.id, T(18), null, null, true);
+check("reprogramar con solape confirmado -> ok y overlap_exempt", mv2.ok && mv2.row.overlap_exempt === true, code(mv2));
+const [bZ] = await q("INSERT INTO barbers(shop_id, name) VALUES ($1,$2) RETURNING id", [shop.id, "Bloqueo"]);
+await db.query("INSERT INTO block_times(shop_id, barber_id, starts_at, ends_at) VALUES ($1,$2,$3::timestamptz,$4::timestamptz)", [shop.id, bZ.id, T(18), T(19)]);
+ov = await book(bZ.id, svc.id, T(18), { asStaff: true, allowOverlap: true });
+check("allow_overlap NO salta un bloqueo -> slot_blocked", !ov.ok && ov.msg.includes("slot_blocked"), code(ov));
 
 // 9. Permisos de las funciones
 const grants = await q(`SELECT p.proname, has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon, has_function_privilege('service_role', p.oid, 'EXECUTE') AS svc FROM pg_proc p WHERE p.proname IN ('book_native_slot','reschedule_native_appointment','cancel_native_appointment','native_backfill_service_refs','native_cutover_check','switch_shop_to_native','switch_shop_to_acuity')`);

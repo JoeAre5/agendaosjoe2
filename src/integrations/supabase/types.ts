@@ -347,6 +347,8 @@ export type Database = {
         Row: {
           acuity_client_id: number | null
           acuity_id: number | null
+          addon_ref_ids: string[]
+          service_ref_id: string | null
           addons: string[] | null
           amount_paid_cents: number
           applied_benefit_redemption_id: string | null
@@ -400,6 +402,8 @@ export type Database = {
         Insert: {
           acuity_client_id?: number | null
           acuity_id?: number | null
+          addon_ref_ids?: string[]
+          service_ref_id?: string | null
           addons?: string[] | null
           amount_paid_cents?: number
           applied_benefit_redemption_id?: string | null
@@ -453,6 +457,8 @@ export type Database = {
         Update: {
           acuity_client_id?: number | null
           acuity_id?: number | null
+          addon_ref_ids?: string[]
+          service_ref_id?: string | null
           addons?: string[] | null
           amount_paid_cents?: number
           applied_benefit_redemption_id?: string | null
@@ -1383,6 +1389,8 @@ export type Database = {
         Row: {
           acuity_attempted_at: string | null
           acuity_id: number | null
+          addon_ref_ids: string[]
+          service_ref_id: string | null
           addon_ids: number[] | null
           applied_benefit_redemption_id: string | null
           appointment_id: string | null
@@ -1424,6 +1432,8 @@ export type Database = {
         Insert: {
           acuity_attempted_at?: string | null
           acuity_id?: number | null
+          addon_ref_ids?: string[]
+          service_ref_id?: string | null
           addon_ids?: number[] | null
           applied_benefit_redemption_id?: string | null
           appointment_id?: string | null
@@ -1465,6 +1475,8 @@ export type Database = {
         Update: {
           acuity_attempted_at?: string | null
           acuity_id?: number | null
+          addon_ref_ids?: string[]
+          service_ref_id?: string | null
           addon_ids?: number[] | null
           applied_benefit_redemption_id?: string | null
           appointment_id?: string | null

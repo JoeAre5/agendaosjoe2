@@ -24,7 +24,7 @@ import { ProductsStep, type ProductCart, type ProductLineItem } from "@/componen
 import { normalizePhone10 } from "@/lib/phone";
 import { useTranslation } from "@/hooks/useTranslation";
 import { usePersistentState, writePersistent } from "@/lib/persistentState";
-import { schedulingProxy as acuityProxy } from "@/lib/scheduling";
+import { schedulingProxy as acuityProxy, getShopProvider } from "@/lib/scheduling";
 
 const BOOKING_KEY = "clientNewAppt.v1";
 const clearBookingDraft = () => {
@@ -36,12 +36,13 @@ const clearBookingDraft = () => {
 };
 
 /* ─── acuity proxy helper ─── */
+
 interface AcuityType {
-  id: number; name: string; duration: number; price: string;
-  color: string; calendarIDs: number[]; category: string;
-  addonIDs: number[]; description: string; private?: boolean;
+  id: number | string; name: string; duration: number; price: string;
+  color: string; calendarIDs: (number | string)[]; category: string;
+  addonIDs: (number | string)[]; description: string; private?: boolean;
 }
-interface AcuityCalendar { id: number; name: string; avatarUrl?: string | null; barberId?: string | null; }
+interface AcuityCalendar { id: number | string; name: string; avatarUrl?: string | null; barberId?: string | null; }
 interface AcuityTimeSlot { time: string; slotsAvailable: number; }
 interface AcuityAddon { id: number; name: string; duration: number; price: string; }
 
@@ -123,7 +124,7 @@ export default function ClientNewAppointment() {
 
   // Data
   const [services, setServices] = useState<AcuityType[]>([]);
-  const [dbServices, setDbServices] = useState<Array<{ acuity_type_id: number; barber_id: string | null; name: string; duration_minutes: number; price_cents: number; sort_order: number; locally_edited: boolean; is_public: boolean }>>([]);
+  const [dbServices, setDbServices] = useState<Array<{ id: string; acuity_type_id: number | null; barber_id: string | null; name: string; duration_minutes: number; price_cents: number; sort_order: number; locally_edited: boolean; is_public: boolean }>>([]);
   const [calendars, setCalendars] = useState<AcuityCalendar[]>([]);
   const [allAddons, setAllAddons] = useState<AcuityAddon[]>([]);
   const [addons, setAddons] = useState<AcuityAddon[]>([]);
@@ -226,14 +227,18 @@ export default function ClientNewAppointment() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await supabase
+        // Native shops: every bookable barber is a calendar (id = barbers.id).
+        // Acuity shops: only barbers linked to an Acuity calendar.
+        const native = (await getShopProvider()).kind === "native";
+        let q = supabase
           .from("barbers_public")
           .select("id, name, acuity_calendar_id, avatar_url")
-          .eq("is_active", true)
-          .not("acuity_calendar_id", "is", null)
-          .order("name");
+          .eq("is_active", true);
+        if (native) q = q.eq("is_bookable", true);
+        else q = q.not("acuity_calendar_id", "is", null);
+        const { data } = await q.order("name");
         const merged: AcuityCalendar[] = (data || []).map((b) => ({
-          id: b.acuity_calendar_id as number,
+          id: native ? b.id : (b.acuity_calendar_id as number),
           name: b.name,
           avatarUrl: b.avatar_url || null,
           barberId: b.id,
@@ -254,7 +259,7 @@ export default function ClientNewAppointment() {
         const [typesData, addonsData, dbSvcRes] = await Promise.all([
           acuityProxy("/appointment-types"),
           acuityProxy("/appointment-addons"),
-          supabase.from("services").select("acuity_type_id, barber_id, name, duration_minutes, price_cents, sort_order, locally_edited, is_public").eq("is_active", true),
+          supabase.from("services").select("id, acuity_type_id, barber_id, name, duration_minutes, price_cents, sort_order, locally_edited, is_public").eq("is_active", true),
         ]);
         if (dbSvcRes.data) setDbServices(dbSvcRes.data as any);
         if (Array.isArray(typesData)) setServices(typesData.filter((t: AcuityType) => !t.private));
@@ -309,8 +314,7 @@ export default function ClientNewAppointment() {
 
     // Match service by acuity type id (id-only — trust historical pairing,
     // even if Acuity later unlinked the service from this calendar).
-    const typeId = repeatServiceTypeId ? parseInt(repeatServiceTypeId, 10) : null;
-    const svcMatch = typeId ? services.find((s) => s.id === typeId) : null;
+    const svcMatch = repeatServiceTypeId ? services.find((s) => String(s.id) === String(repeatServiceTypeId)) : null;
     if (svcMatch) {
       setSelectedType(svcMatch);
       setStep("datetime");
@@ -328,10 +332,10 @@ export default function ClientNewAppointment() {
     const barberId = selectedCalendar.barberId;
     const acuityForCal = services.filter((t) => t.calendarIDs?.includes(selectedCalendar.id));
 
-    // Build override map for this barber: acuity_type_id → local row
-    const overrides = new Map<number, typeof dbServices[number]>();
+    // Build override map for this barber: acuity_type_id (or services.id on native shops) → local row
+    const overrides = new Map<number | string, typeof dbServices[number]>();
     for (const ds of dbServices) {
-      if (ds.barber_id === barberId) overrides.set(ds.acuity_type_id, ds);
+      if (ds.barber_id === barberId) overrides.set(ds.acuity_type_id ?? ds.id, ds);
     }
 
     // Apply overrides to Acuity-backed services. Hide if overridden as private.

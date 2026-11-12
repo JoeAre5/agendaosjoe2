@@ -52,7 +52,7 @@ import { usePersistentState } from "@/lib/persistentState";
 import { useUrlState, isUuid } from "@/lib/urlState";
 import ClientReferralNetwork from "@/components/admin/ClientReferralNetwork";
 import { ClientBirthdayField } from "@/components/ClientBirthdayField";
-import { schedulingProxy as acuityProxy, appointmentRef } from "@/lib/scheduling";
+import { schedulingProxy as acuityProxy, appointmentRef, getShopProvider } from "@/lib/scheduling";
 
 type Client = {
   id: string;
@@ -592,7 +592,8 @@ export default function Clients() {
     }
   };
 
-  // Acuity proxy helper for client sync
+
+
   // Save contact info changes (Supabase clients + appointments + Acuity)
   const saveContact = async () => {
     if (!selectedClient || savingContact) return;
@@ -623,9 +624,10 @@ export default function Clients() {
         .is("client_id", null)
         .eq("client_name", oldFullName);
 
-      // 3) Sync to Acuity. Use stored acuity_client_id when present; otherwise
-      //    look up by old phone/email so renaming/repointing still propagates.
-      try {
+      // 3) Sync to Acuity (Acuity shops only). Use stored acuity_client_id when
+      //    present; otherwise look up by old phone/email so renaming/repointing still propagates.
+      const syncToAcuity = (await getShopProvider()).kind !== "native";
+      if (syncToAcuity) try {
         let acuityId: number | null = selectedClient.acuity_client_id ?? null;
         if (!acuityId) {
           const lookupPhone = (selectedClient.phone || "").replace(/\D/g, "").slice(-10);
@@ -731,10 +733,11 @@ export default function Clients() {
       .gt("starts_at", new Date().toISOString())
       .in("status", ["scheduled", "confirmed", "in-progress"]);
 
+    const nativeShop = (await getShopProvider()).kind === "native";
     for (const appointment of futureAppointments || []) {
-      if (typeof appointment.acuity_id === "number" && appointment.acuity_id > 0) {
+      if (nativeShop || (typeof appointment.acuity_id === "number" && appointment.acuity_id > 0)) {
         try {
-          await acuityProxy(`/appointments/${appointmentRef(appointment, false)}/cancel`, "PUT", {
+          await acuityProxy(`/appointments/${appointmentRef(appointment, nativeShop)}/cancel`, "PUT", {
             admin: true,
             noEmail: true,
             cancelNote: "Client deleted by shop",
