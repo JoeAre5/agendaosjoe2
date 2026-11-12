@@ -41,6 +41,16 @@ describe("Hasib integration exclusions", () => {
     expect(src).toContain("book_native_slot");
     expect(src).toMatch(/if \(!isNative && draft\.acuity_id\)/);
   });
+  it("outbound webhooks: triggers cannot break a booking and never hardcode a project URL", () => {
+    const sql = readFileSync("drizzle/migrations/0025_outbound_webhooks.sql", "utf8");
+    const code = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+    expect(code).not.toMatch(/supabase\.co/);
+    expect(code).toContain("outbound_webhook_config");
+    for (const fn of ["emit_outbound_event", "appointments_outbound_trigger", "services_outbound_trigger", "service_addons_outbound_trigger"]) {
+      const body = code.slice(code.indexOf(`FUNCTION public.${fn}`));
+      expect(body.slice(0, body.indexOf("$$;", 10))).toMatch(/EXCEPTION WHEN OTHERS THEN/);
+    }
+  });
   it("no migration switches every shop to the native scheduler", () => {
     const sql = [
       ...readdirSync("drizzle/migrations").filter((f) => f.endsWith(".sql")).map((f) => readFileSync(`drizzle/migrations/${f}`, "utf8")),

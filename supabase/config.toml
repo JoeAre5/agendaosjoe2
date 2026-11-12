@@ -41,3 +41,9 @@ verify_jwt = false
 
 [functions.availability]
 verify_jwt = false
+
+[functions.outbound-webhook-dispatch]
+verify_jwt = false
+
+[functions.webhook-echo]
+verify_jwt = false
