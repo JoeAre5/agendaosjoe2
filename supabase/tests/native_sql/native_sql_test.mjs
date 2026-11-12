@@ -18,7 +18,7 @@ await db.exec(`
   CREATE TYPE public.app_role AS ENUM ('owner','super_owner','barber','client');
   CREATE FUNCTION public.is_owner() RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
   CREATE FUNCTION public.has_role(_u uuid, _r public.app_role) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
-  CREATE TABLE public.shops (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text, is_active boolean NOT NULL DEFAULT true,
+  CREATE TABLE public.shops (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text, is_active boolean NOT NULL DEFAULT true, updated_at timestamptz NOT NULL DEFAULT now(),
     booking_provider text NOT NULL DEFAULT 'acuity', timezone text DEFAULT 'America/Puerto_Rico');
   CREATE TABLE public.barbers (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), shop_id uuid REFERENCES public.shops(id), name text,
     is_active boolean NOT NULL DEFAULT true, is_bookable boolean NOT NULL DEFAULT true);
@@ -45,6 +45,7 @@ await db.exec(`
   CREATE TABLE public.booking_drafts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), shop_id uuid, barber_id uuid,
     appointment_type_id integer NOT NULL, calendar_id integer NOT NULL, status text NOT NULL DEFAULT 'pending', expires_at timestamptz);
   CREATE TABLE public.audit_log (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, action text, entity_type text, entity_id uuid, metadata jsonb);
+  CREATE TABLE public.working_hours (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), shop_id uuid, barber_id uuid, day_of_week integer NOT NULL, start_time time, end_time time, is_active boolean DEFAULT true);
   CREATE TABLE public.shop_hours (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), shop_id uuid, day_of_week integer NOT NULL, start_time time, end_time time, is_active boolean DEFAULT true);
 `);
 
@@ -53,8 +54,9 @@ const apply = async (f) => { const e = await err(read(f)); check(`migracion ${f}
 await apply("0016_booking_draft_holds.sql");
 await apply("0022_native_scheduling_schema.sql");
 await apply("0023_native_booking_functions.sql");
+await apply("0024_native_cutover_helpers.sql");
 // idempotencia: se pueden volver a correr
-for (const f of ["0022_native_scheduling_schema.sql", "0023_native_booking_functions.sql"]) { const e = await err(read(f)); check(`migracion ${f} es idempotente (2a ejecucion)`, e === null, e); }
+for (const f of ["0022_native_scheduling_schema.sql", "0023_native_booking_functions.sql", "0024_native_cutover_helpers.sql"]) { const e = await err(read(f)); check(`migracion ${f} es idempotente (2a ejecucion)`, e === null, e); }
 
 // ── Datos ──────────────────────────────────────────────────────────────────
 const [shop] = await q(`INSERT INTO shops(name, booking_provider) VALUES ('Tienda', 'acuity') RETURNING id`);
@@ -139,8 +141,10 @@ const upsert = await err(`INSERT INTO appointments(shop_id, acuity_id, barber_id
 check("el upsert ON CONFLICT (acuity_id) de Acuity sigue funcionando", upsert === null, upsert);
 const dupNull = await q(`SELECT count(*)::int AS n FROM appointments WHERE acuity_id IS NULL`);
 check("varias citas nativas con acuity_id NULL conviven", dupNull[0].n >= 5, dupNull[0].n);
-const cA = await err(`SELECT public.cancel_native_appointment((SELECT id FROM appointments WHERE acuity_id=999001))`);
-check("cancelar una cita de Acuity por la via nativa se rechaza", cA && cA.includes("provider_not_native"), cA);
+// En una tienda NATIVA, una cita heredada de Acuity (acuity_id puesto) tambien se cancela aqui.
+const legacyId = (await q("SELECT id FROM appointments WHERE acuity_id=999001"))[0].id;
+const cL = await err("SELECT public.cancel_native_appointment($1::uuid)", [legacyId]);
+check("en tienda nativa, una cita heredada de Acuity SI se cancela por la via nativa", cL === null, cL);
 
 // 7. Reprogramar
 const resch = async (id, starts, barber = null, dur = null) => { try { return { ok: true, row: (await q(`SELECT public.reschedule_native_appointment($1,$2::timestamptz,$3,$4) AS r`, [id, starts, barber, dur]))[0].r }; } catch (e) { return { ok: false, msg: String(e.message) }; } };
@@ -171,9 +175,45 @@ await cancel(unpaid.id);
 const au2 = (await q(`SELECT refund_status FROM appointments WHERE id=$1`, [unpaid.id]))[0];
 check("cancelar sin pago no marca reembolso", au2.refund_status === null, au2.refund_status);
 
+// 8b. Corte: pasar UNA tienda de Acuity a nativo, y volver
+const [shop2] = await q("INSERT INTO shops(name, booking_provider) VALUES ($1, $2) RETURNING id", ["Tienda 2", "acuity"]);
+const [c1] = await q("INSERT INTO barbers(shop_id, name) VALUES ($1, $2) RETURNING id", [shop2.id, "Ana"]);
+const [c2] = await q("INSERT INTO barbers(shop_id, name) VALUES ($1, $2) RETURNING id", [shop2.id, "Beto"]);
+const [cs1] = await q("INSERT INTO services(shop_id, barber_id, name, duration_minutes, price_cents, acuity_type_id) VALUES ($1,$2,$3,30,2500,501) RETURNING id", [shop2.id, c1.id, "Corte"]);
+const [cs2] = await q("INSERT INTO services(shop_id, barber_id, name, duration_minutes, price_cents, acuity_type_id) VALUES ($1,$2,$3,30,2500,502) RETURNING id", [shop2.id, c2.id, "Corte"]);
+const chk = async () => (await q("SELECT public.native_cutover_check($1::uuid) AS r", [shop2.id]))[0].r;
+let ck = await chk();
+check("chequeo: barberos sin horario -> no esta listo", ck.ready === false && ck.bookable_barbers_without_hours === 2, JSON.stringify(ck));
+let sw = await err("SELECT public.switch_shop_to_native($1::uuid)", [shop2.id]);
+check("no se puede cambiar a nativo si un barbero no tiene horario", sw && sw.includes("cutover_barber_without_hours"), sw);
+await db.query("INSERT INTO working_hours(shop_id, barber_id, day_of_week, start_time, end_time) VALUES ($1,$2,5,$3,$4),($1,$5,5,$3,$4)", [shop2.id, c1.id, "09:00", "17:00", c2.id]);
+// citas heredadas de Acuity con service_id entero (sin service_ref_id)
+const futuro = (h) => "2026-12-04T" + String(h).padStart(2, "0") + ":00:00-04:00";
+await db.query("INSERT INTO appointments(shop_id, acuity_id, barber_id, client_name, service_name, service_id, starts_at, ends_at, duration_minutes, booking_source) VALUES ($1,700001,$2,$3,$4,501,$5::timestamptz,$6::timestamptz,30,$7),($1,700002,$8,$3,$4,502,$9::timestamptz,$10::timestamptz,30,$7),($1,700003,$2,$3,$4,-123456,$11::timestamptz,$12::timestamptz,30,$7)", [shop2.id, c1.id, "Cliente", "Corte", futuro(10), futuro(11), "acuity_sync", c2.id, futuro(10), futuro(11), futuro(13), futuro(14)]);
+const [dr] = await q("INSERT INTO booking_drafts(shop_id, barber_id, appointment_type_id, calendar_id, status, expires_at) VALUES ($1,$2,1,1,$3, now() + $4::interval) RETURNING id", [shop2.id, c1.id, "pending", "20 minutes"]);
+sw = await err("SELECT public.switch_shop_to_native($1::uuid)", [shop2.id]);
+check("un borrador abierto impide el cambio -> cutover_open_drafts", sw && sw.includes("cutover_open_drafts"), sw);
+await db.query("UPDATE booking_drafts SET status=$1 WHERE id=$2", ["expired", dr.id]);
+ck = await chk();
+check("chequeo: con horarios y sin borradores abiertos esta listo", ck.ready === true && ck.future_appointments === 3, JSON.stringify(ck));
+const swr = (await q("SELECT public.switch_shop_to_native($1::uuid, NULL) AS r", [shop2.id]))[0].r;
+check("switch_shop_to_native cambia el proveedor", swr.success === true && (await q("SELECT booking_provider FROM shops WHERE id=$1", [shop2.id]))[0].booking_provider === "native");
+check("enlaza las citas heredadas con su servicio local (2 de 3; la sintetica negativa no)", swr.appointments_linked === 2, swr.appointments_linked);
+const lk = await q("SELECT acuity_id, service_ref_id FROM appointments WHERE shop_id=$1 ORDER BY acuity_id", [shop2.id]);
+check("la cita del barbero A queda con SU servicio y la del barbero B con el suyo", lk[0].service_ref_id === cs1.id && lk[1].service_ref_id === cs2.id && lk[2].service_ref_id === null, JSON.stringify(lk));
+check("el cambio queda en audit_log", (await q("SELECT count(*)::int n FROM audit_log WHERE action=$1", ["switch_shop_to_native"]))[0].n === 1);
+sw = await err("SELECT public.switch_shop_to_native($1::uuid)", [shop2.id]);
+check("cambiar de nuevo una tienda ya nativa -> cutover_not_from_acuity", sw && sw.includes("cutover_not_from_acuity"), sw);
+const mv = await resch((await q("SELECT id FROM appointments WHERE acuity_id=700001"))[0].id, futuro(15));
+check("tras el cambio, una cita heredada se reprograma por la via nativa", mv.ok, code(mv));
+const back = (await q("SELECT public.switch_shop_to_acuity($1::uuid, NULL) AS r", [shop2.id]))[0].r;
+check("switch_shop_to_acuity (reversa) vuelve a Acuity", back.success === true && (await q("SELECT booking_provider FROM shops WHERE id=$1", [shop2.id]))[0].booking_provider === "acuity");
+sw = await err("SELECT public.switch_shop_to_acuity($1::uuid)", [shop2.id]);
+check("la reversa solo vale desde nativo -> rollback_not_from_native", sw && sw.includes("rollback_not_from_native"), sw);
+
 // 9. Permisos de las funciones
-const grants = await q(`SELECT p.proname, has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon, has_function_privilege('service_role', p.oid, 'EXECUTE') AS svc FROM pg_proc p WHERE p.proname IN ('book_native_slot','reschedule_native_appointment','cancel_native_appointment')`);
-check("las 3 funciones de escritura: solo service_role", grants.length === 3 && grants.every(g => !g.auth && !g.anon && g.svc), JSON.stringify(grants));
+const grants = await q(`SELECT p.proname, has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon, has_function_privilege('service_role', p.oid, 'EXECUTE') AS svc FROM pg_proc p WHERE p.proname IN ('book_native_slot','reschedule_native_appointment','cancel_native_appointment','native_backfill_service_refs','native_cutover_check','switch_shop_to_native','switch_shop_to_acuity')`);
+check("las 7 funciones de escritura y de corte: solo service_role", grants.length === 7 && grants.every(g => !g.auth && !g.anon && g.svc), JSON.stringify(grants));
 
 console.log(results.join("\n"));
 console.log(`\nRESUMEN: ${pass} ok, ${fail} fallas`);

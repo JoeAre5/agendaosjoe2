@@ -233,7 +233,9 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'appointment_not_found';
   END IF;
-  IF v_appt.acuity_id IS NOT NULL OR public.shop_booking_provider(v_appt.shop_id) IS DISTINCT FROM 'native' THEN
+  -- En una tienda nativa TODAS sus citas se manejan aqui, incluidas las heredadas de Acuity
+  -- (acuity_id puesto): al cambiar la tienda a nativa, esas citas ya no se gestionan en Acuity.
+  IF public.shop_booking_provider(v_appt.shop_id) IS DISTINCT FROM 'native' THEN
     RAISE EXCEPTION 'provider_not_native';
   END IF;
 
@@ -312,7 +314,7 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'appointment_not_found';
   END IF;
-  IF v_appt.acuity_id IS NOT NULL THEN
+  IF public.shop_booking_provider(v_appt.shop_id) IS DISTINCT FROM 'native' THEN
     RAISE EXCEPTION 'provider_not_native';
   END IF;
   IF v_appt.status = 'cancelled' THEN

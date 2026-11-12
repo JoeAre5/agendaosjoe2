@@ -169,6 +169,13 @@
       "when": 1794483103023,
       "tag": "0023_native_booking_functions",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794483104023,
+      "tag": "0024_native_cutover_helpers",
+      "breakpoints": true
     }
   ]
 }

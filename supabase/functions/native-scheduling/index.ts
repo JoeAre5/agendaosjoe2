@@ -249,7 +249,6 @@ Deno.serve(async (req) => {
         if (!appointmentId) return jsonRes({ error: "missing_fields", detail: "appointmentId" }, 400);
         const row = await ownAppointment(appointmentId);
         if (!row) return jsonRes({ error: "appointment_not_found" }, 404);
-        if (row.acuity_id) return jsonRes({ error: "provider_not_native" }, 409);
         if (!canWriteBarber(caller, row.barber_id)) return notYourCalendar();
 
         const patch: Record<string, unknown> = {};
@@ -322,7 +321,7 @@ Deno.serve(async (req) => {
         if (!appointmentId || !startsAt) return jsonRes({ error: "missing_fields", detail: "appointmentId, startsAt" }, 400);
         const row = await ownAppointment(appointmentId);
         if (!row) return jsonRes({ error: "appointment_not_found" }, 404);
-        if (row.acuity_id) return jsonRes({ error: "provider_not_native" }, 409);
+        // Las citas heredadas de Acuity (acuity_id puesto) tambien se reprograman aqui una vez la tienda es nativa.
         if (!row.service_ref_id) return jsonRes({ error: "service_unavailable", detail: "appointment has no native service" }, 409);
         const targetBarber = str(body.barberId) ?? row.barber_id;
         // Un barbero reprograma solo en su calendario (origen y destino); un cliente, solo sus citas.
@@ -374,7 +373,6 @@ Deno.serve(async (req) => {
         if (!appointmentId) return jsonRes({ error: "missing_fields", detail: "appointmentId" }, 400);
         const row = await ownAppointment(appointmentId);
         if (!row) return jsonRes({ error: "appointment_not_found" }, 404);
-        if (row.acuity_id) return jsonRes({ error: "provider_not_native" }, 409);
         if (!canWriteBarber(caller, row.barber_id)) return notYourCalendar();
         const { data, error } = await admin.rpc("cancel_native_appointment", {
           _appointment_id: row.id,
