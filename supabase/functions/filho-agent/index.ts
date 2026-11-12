@@ -8,6 +8,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.57.2";
 import { formatInShopTz, getShopNow } from "../_shared/timezone.ts";
+import { nativeShopFor } from "../_shared/nativeDraft.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -571,6 +572,19 @@ const cancel_my_appointment: ToolDef = {
       };
     }
 
+    // Native scheduler: cancel in the database (no Acuity call). Paid appointments are flagged for a manual refund.
+    const cancelShop = await nativeShopFor(ctx.admin, null).catch(() => null);
+    if (cancelShop?.kind === "native") {
+      const { error: nativeCancelErr } = await ctx.admin.rpc("cancel_native_appointment", {
+        _appointment_id: appt.id,
+        _reason: "Cancelled by client via Filho",
+        _cancelled_by_role: "client",
+        _actor_user_id: null,
+      });
+      if (nativeCancelErr) return { error: "cancel_failed", detail: nativeCancelErr.message };
+      return { success: true, cancelled_at_label: await formatInShopTz(new Date().toISOString()) };
+    }
+
     // Cancel in Acuity
     const acuityUserId = Deno.env.get("ACUITY_USER_ID");
     const acuityApiKey = Deno.env.get("ACUITY_API_KEY");
@@ -661,7 +675,7 @@ const open_reschedule: ToolDef = {
     if (!ctx.clientId) return { error: "no_client" };
     const { data: appt } = await ctx.admin
       .from("appointments")
-      .select("id, acuity_id, client_id, service_id, service_name, barber_id, duration_minutes, starts_at, status, barbers:barber_id(name)")
+      .select("id, acuity_id, client_id, service_id, service_ref_id, service_name, barber_id, duration_minutes, starts_at, status, barbers:barber_id(name)")
       .eq("id", String(args.appointment_id))
       .maybeSingle();
     if (!appt || appt.client_id !== ctx.clientId) return { error: "appointment_not_found_or_forbidden" };
@@ -672,7 +686,7 @@ const open_reschedule: ToolDef = {
     const params = new URLSearchParams({
       apptId: appt.id,
       acuityId: String(appt.acuity_id || ""),
-      typeId: String(appt.service_id || ""),
+      typeId: String(appt.service_id || appt.service_ref_id || ""),
       barberId: appt.barber_id || "",
       service: appt.service_name || "",
       barber: barberName,
@@ -1086,9 +1100,10 @@ async function fetchShopCatalog(admin: SupabaseClient): Promise<string> {
       .eq("is_active", true)
       .eq("is_public", true)
       .order("sort_order", { ascending: true });
-    const seen = new Set<number>();
+    const seen = new Set<number | string>();
+    // Native services have no Acuity type id: de-duplicate by name instead.
     const lines = (services || [])
-      .filter((s: any) => s.acuity_type_id && !seen.has(s.acuity_type_id) && (seen.add(s.acuity_type_id), true))
+      .filter((s: any) => { const k = s.acuity_type_id ?? `n:${String(s.name).toLowerCase()}`; return !seen.has(k) && (seen.add(k), true); })
       .map((s: any) => `  - ${s.name} (${s.duration_minutes} min)`);
     if (lines.length > 0) {
       block += `\n\nSERVICIOS DISPONIBLES (nombres y duraciones, NO precios, los precios varían por barbero, usa list_services_for_barber para precios reales):\n${lines.join("\n")}\n`;

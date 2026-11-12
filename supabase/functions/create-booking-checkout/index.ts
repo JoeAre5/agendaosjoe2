@@ -88,7 +88,7 @@ serve(async (req) => {
   const { data: draft, error: draftErr } = await admin
     .from("booking_drafts")
     .select(
-      "id, status, created_at, expires_at, total_cents, client_id, first_name, last_name, email, phone, appointment_type_id, stripe_checkout_session_id",
+      "id, status, created_at, expires_at, total_cents, client_id, first_name, last_name, email, phone, appointment_type_id, service_ref_id, stripe_checkout_session_id",
     )
     .eq("id", draftId)
     .maybeSingle();
@@ -157,6 +157,9 @@ serve(async (req) => {
       .select("name")
       .eq("acuity_id", draft.appointment_type_id)
       .maybeSingle();
+    if (svc?.name) serviceName = svc.name as string;
+  } else if (draft.service_ref_id) {
+    const { data: svc } = await admin.from("services").select("name").eq("id", draft.service_ref_id).maybeSingle();
     if (svc?.name) serviceName = svc.name as string;
   }
 

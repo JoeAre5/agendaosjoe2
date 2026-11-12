@@ -12,6 +12,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { queueOrDispatchRecurringPush } from "../_shared/recurringPush.ts";
+import { nativeShopFor } from "../_shared/nativeDraft.ts";
 import { notifyOwners } from "../_shared/notifyOwners.ts";
 
 const corsHeaders = {
@@ -87,7 +88,9 @@ serve(async (req) => {
     }
 
     // Cancel in Acuity (best-effort — never block local cancellation if it fails).
-    if (appt.acuity_id) {
+    // Native shops never call Acuity, not even for rows that came from Acuity before the cutover.
+    const refundShop = await nativeShopFor(admin, null).catch(() => null);
+    if (appt.acuity_id && refundShop?.kind !== "native") {
       const userId = Deno.env.get("ACUITY_USER_ID");
       const apiKey = Deno.env.get("ACUITY_API_KEY");
       if (userId && apiKey) {

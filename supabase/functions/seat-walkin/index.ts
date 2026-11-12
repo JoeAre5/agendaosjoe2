@@ -1,5 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { contactEmail } from "../_shared/contactEmail.ts";
+import { nativeRpcError } from "../_shared/nativeBooking.ts";
+import { nativeShopFor } from "../_shared/nativeDraft.ts";
 // Phase 1B.TIMEZONE: utcIsoToAcuityDatetime imported dynamically inside handler.
 
 const corsHeaders = {
@@ -114,6 +116,9 @@ Deno.serve(async (req) => {
       return json({ error: "Barber not found" }, 404);
     }
 
+    // Native scheduler: no Acuity call even if the barber still has an acuity_calendar_id.
+    const seatShop = await nativeShopFor(supabaseAdmin, null);
+    const isNativeSeat = seatShop.kind === "native";
     let acuityAppointmentId: number | null = null;
     let acuitySkipped = false;
     let acuityData: any = null;
@@ -124,7 +129,7 @@ Deno.serve(async (req) => {
     // Query local services table — prefer match for this barber
     const { data: localServices } = await supabaseAdmin
       .from("services")
-      .select("acuity_type_id, name, duration_minutes, price_cents, barber_id")
+      .select("id, acuity_type_id, name, duration_minutes, price_cents, barber_id")
       .eq("is_active", true);
 
     let matchedService: any = null;
@@ -148,7 +153,7 @@ Deno.serve(async (req) => {
     console.log("Matched local service:", service.name, "acuity_type_id:", service.acuity_type_id);
 
     // ── 3. CREATE APPOINTMENT IN ACUITY (if barber has calendar) ──
-    if (barber.acuity_calendar_id) {
+    if (!isNativeSeat && barber.acuity_calendar_id) {
       const acuityUserId = Deno.env.get("ACUITY_USER_ID");
       const acuityApiKey = Deno.env.get("ACUITY_API_KEY");
       if (!acuityUserId || !acuityApiKey) {
@@ -212,7 +217,7 @@ Deno.serve(async (req) => {
       acuityAppointmentId = acuityData.id;
       console.log("Acuity appointment created:", acuityAppointmentId);
     } else {
-      acuitySkipped = true;
+      acuitySkipped = !isNativeSeat;
     }
 
     // ── 3. UPDATE WAITLIST ROW ──
@@ -267,7 +272,43 @@ Deno.serve(async (req) => {
     // ── 4. CREATE LOCAL APPOINTMENT DIRECTLY ──
     let localAppointmentId: string | null = null;
 
-    if (acuityAppointmentId && acuityData) {
+    if (isNativeSeat) {
+      // Native: the appointment is written by the database function (same lock as online bookings).
+      // Staff seating a walk-in may share time with another appointment (like Acuity admin=true).
+      const { data: booked, error: bookErr } = await supabaseAdmin.rpc("book_native_slot", {
+        _shop_id: seatShop.shopId,
+        _barber_id: barber_id,
+        _service_id: service.id,
+        _starts_at: new Date(seated_at_datetime).toISOString(),
+        _client: {
+          client_id: entry.client_id || null,
+          first_name: entry.first_name,
+          last_name: entry.last_name || null,
+          phone: entry.phone || null,
+          email: contactEmail(email) || null,
+        },
+        _addon_ids: [],
+        _notes: "Walk-in — Lista de Espera",
+        _booking_source: "walk_in",
+        _created_by_role: callerRole,
+        _created_by_user_id: callerUserId,
+        _payment: {},
+        _price_cents: null,
+        _draft_id: null,
+        _recurring_group_id: null,
+        _label: null,
+        _as_staff: true,
+        _allow_overlap: true,
+      });
+      if (bookErr || !booked) {
+        const e = nativeRpcError(bookErr);
+        // Put the client back in the queue: nothing was booked.
+        await supabaseAdmin.from("waitlist").update({ status: "waiting", seated_at: null }).eq("id", waitlist_id).eq("status", "seated");
+        return json({ error: (e as any).reason || "native_booking_failed", detail: e.message }, 409);
+      }
+      localAppointmentId = (booked as any).id;
+      await supabaseAdmin.from("waitlist").update({ appointment_id: localAppointmentId }).eq("id", waitlist_id);
+    } else if (acuityAppointmentId && acuityData) {
       // Use data directly from the Acuity POST response (no re-fetch needed)
       const clientName = `${entry.first_name} ${entry.last_name || ""}`.trim();
       const startsAt = acuityData.datetime

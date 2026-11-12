@@ -31,6 +31,16 @@ describe("Hasib integration exclusions", () => {
     expect(readFileSync("src/lib/scheduling/provider.ts", "utf8")).toMatch(/FALLBACK[^=]*=\s*\{[^}]*kind:\s*"acuity"/);
   });
   // Solo se permite el cambio por tienda y por id (switch_shop_to_native); nunca un UPDATE global.
+  it("Acuity sync and webhook functions stand down once a shop is native", () => {
+    for (const name of ["acuity-sync", "acuity-webhook", "acuity-block-sync", "acuity-sync-services"]) {
+      expect(readFileSync(`supabase/functions/${name}/index.ts`, "utf8")).toContain("isNativeMode");
+    }
+  });
+  it("the shared commit of paid bookings has a native branch that never calls Acuity", () => {
+    const src = readFileSync("supabase/functions/_shared/commitDraft.ts", "utf8");
+    expect(src).toContain("book_native_slot");
+    expect(src).toMatch(/if \(!isNative && draft\.acuity_id\)/);
+  });
   it("no migration switches every shop to the native scheduler", () => {
     const sql = [
       ...readdirSync("drizzle/migrations").filter((f) => f.endsWith(".sql")).map((f) => readFileSync(`drizzle/migrations/${f}`, "utf8")),

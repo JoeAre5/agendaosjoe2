@@ -5,6 +5,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyOwners } from "../_shared/notifyOwners.ts";
 import { contactEmail } from "../_shared/contactEmail.ts";
 import { readAvailabilityDuration } from "./availabilityDuration.ts";
+import { BookingRejectedError, nativeRpcError } from "../_shared/nativeBooking.ts";
+import { nativeQuote, nativeShopFor } from "../_shared/nativeDraft.ts";
+import {
+  nativeErrorCode,
+  nativeErrorStatus,
+  nativeListAddons,
+  nativeListCalendars,
+  nativeListDates,
+  nativeListServices,
+  nativeListTimes,
+  parseCatalogQuery,
+} from "../_shared/native/catalog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,6 +63,40 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const action = String(body.action || "");
+
+    // ─── Native scheduler (shops.booking_provider = native): catalogue, hours and booking come from
+    // this database. Acuity shops fall through to the Acuity code below, unchanged. ───
+    let nativeShopId: string | null = null;
+    if (action !== "list-products") {
+      try {
+        const sp = await nativeShopFor(createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!), null);
+        if (sp.kind === "native") nativeShopId = sp.shopId;
+      } catch (e) {
+        console.warn("[public-booking-create] provider lookup failed, using Acuity path:", (e as Error).message);
+      }
+    }
+    if (nativeShopId) {
+      const nAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const q = parseCatalogQuery(body);
+      try {
+        if (action === "list-calendars") return jsonRes(await nativeListCalendars(nAdmin, nativeShopId));
+        if (action === "list-services") return jsonRes(await nativeListServices(nAdmin, nativeShopId));
+        if (action === "list-addons") return jsonRes(await nativeListAddons(nAdmin, nativeShopId));
+        if (action === "list-dates") {
+          if (!q.serviceId || !q.month) return jsonRes({ error: "Missing fields" }, 400);
+          return jsonRes(await nativeListDates(nAdmin, nativeShopId, { serviceId: q.serviceId, barberId: q.barberId, addonIds: q.addonIds, month: q.month }));
+        }
+        if (action === "list-times") {
+          if (!q.serviceId || !q.date) return jsonRes({ error: "Missing fields" }, 400);
+          if (!/^d{4}-d{2}-d{2}$/.test(String(q.date))) return jsonRes({ error: "Invalid date" }, 400);
+          return jsonRes(await nativeListTimes(nAdmin, nativeShopId, { serviceId: q.serviceId, barberId: q.barberId, addonIds: q.addonIds, date: q.date }));
+        }
+      } catch (e) {
+        const status = nativeErrorStatus(e);
+        console.error(JSON.stringify({ event: "public_catalog_failed", fn: "public-booking-create", action, code: nativeErrorCode(e), status }));
+        return jsonRes({ error: status >= 500 ? "availability_unavailable" : nativeErrorCode(e) }, status);
+      }
+    }
 
     // ─── READ actions (no DB writes) ───
     if (action === "list-calendars") {
@@ -242,6 +288,99 @@ Deno.serve(async (req) => {
           return jsonRes({ error: "Could not create client", detail: createErr?.message }, 500);
         }
         clientId = created.id;
+      }
+
+      // ─── Native scheduler: validate with the public rules, then book atomically in the database ───
+      if (nativeShopId) {
+        const addonIds = Array.isArray(addonIDs) ? addonIDs.map((a: unknown) => String(a)) : [];
+        const { data: nBarber } = await admin.from("barbers").select("id, name").eq("id", String(calendarID)).eq("shop_id", nativeShopId).maybeSingle();
+        if (!nBarber?.id) return jsonRes({ error: "Barber not found" }, 400);
+        const qte = await nativeQuote(admin, nativeShopId, {
+          serviceId: String(appointmentTypeID), barberId: nBarber.id, addonIds, startsAt: String(datetime),
+        });
+        if (!qte.ok) return jsonRes({ error: qte.error === "slot_unavailable" ? "slot_taken" : qte.error }, qte.status);
+        const { data: booked, error: bookErr } = await admin.rpc("book_native_slot", {
+          _shop_id: nativeShopId,
+          _barber_id: nBarber.id,
+          _service_id: String(appointmentTypeID),
+          _starts_at: qte.startsAt,
+          _client: { client_id: clientId, first_name: fName, last_name: lName || null, phone: phoneNorm, email: emailTrim || null },
+          _addon_ids: addonIds,
+          _notes: notes ? String(notes).slice(0, 1000) : null,
+          _booking_source: "public_site",
+          _created_by_role: "public_site",
+          _created_by_user_id: null,
+          _payment: {},
+          _price_cents: null,
+          _draft_id: null,
+          _recurring_group_id: null,
+          _label: null,
+          _as_staff: false,
+          _allow_overlap: false,
+        });
+        if (bookErr || !booked) {
+          const e = nativeRpcError(bookErr);
+          if (e instanceof BookingRejectedError) return jsonRes({ error: e.reason === "slot_held" ? "slot_taken" : e.reason }, 409);
+          console.error("[public-booking-create] native booking failed:", e.message);
+          return jsonRes({ error: "booking_failed" }, 500);
+        }
+        const row = booked as Record<string, any>;
+        try {
+          const dateStr = new Date(row.starts_at).toLocaleString("es-PR", {
+            timeZone: "America/Puerto_Rico", weekday: "short", day: "2-digit", month: "short", hour: "numeric", minute: "2-digit", hour12: true,
+          });
+          notifyOwners({
+            event_key: "admin_booking_new",
+            vars: { source: "Sitio público", client: row.client_name, service: row.service_name, barber: nBarber.name, date: dateStr, appointment_id: row.id },
+            defaults: {
+              title: "Nueva cita (Sitio público)",
+              body: `${row.client_name} reservó ${row.service_name}, ${dateStr}.`,
+              url: `/admin/appointment/${row.id}`,
+              tag: `new-appointment-${row.id}`,
+            },
+          }).catch((e) => console.warn("notifyOwners warn:", (e as Error).message));
+        } catch (e) {
+          console.warn("notifyOwners setup warn:", (e as Error).message);
+        }
+        if (emailTrim) {
+          const dateLabel = new Date(row.starts_at).toLocaleString("es-PR", {
+            weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Puerto_Rico",
+          });
+          const cents = Number(row.price_cents) || 0;
+          admin.functions.invoke("send-transactional-email", {
+            body: {
+              templateName: "booking-confirmation",
+              recipientEmail: emailTrim,
+              idempotencyKey: `booking-unpaid-${row.id}`,
+              templateData: {
+                clientName: fName || undefined,
+                serviceName: row.service_name,
+                barberName: nBarber.name,
+                appointmentDate: dateLabel,
+                totalLabel: cents > 0 ? `$${(cents / 100).toFixed(2)}` : "Pago al llegar",
+                payUrl: `https://charliesbarbershop.co/pay/${row.id}`,
+                isPaid: false,
+              },
+            },
+          }).catch((e) => console.error("Email send failed:", e));
+        }
+        return jsonRes({
+          success: true,
+          acuityId: null,
+          appointmentId: row.id,
+          clientId,
+          isReturning,
+          returningName,
+          cardOnFile,
+          appointment: {
+            id: row.id,
+            starts_at: row.starts_at,
+            service_name: row.service_name,
+            barber_name: nBarber.name,
+            price: ((Number(row.price_cents) || 0) / 100).toFixed(2),
+            duration: row.duration_minutes,
+          },
+        });
       }
 
       // Resolve barber from calendarID

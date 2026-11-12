@@ -14,12 +14,15 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2.57.2";
 import { notifyOwners } from "./notifyOwners.ts";
 import { contactEmail } from "./contactEmail.ts";
 import { createAcuityAddonResolver } from "./acuityAddons.ts";
+import { BookingRejectedError, nativeRpcError } from "./nativeBooking.ts";
+import { nativeShopFor } from "./nativeDraft.ts";
 
 export interface CommitResult {
   success: true;
   alreadyCommitted: boolean;
   appointmentId: string;
-  acuityId: number;
+  /** Acuity appointment id; null when the shop books natively (no Acuity involved). */
+  acuityId: number | null;
   draft: any;
   appointment: {
     id: string;
@@ -195,7 +198,106 @@ export async function commitDraft(
   type AcuityData = Record<string, unknown> & { id?: number; error?: string; message?: string; status_code?: number };
   let acuityData: AcuityData | null = null;
 
-  if (draft.acuity_id) {
+  // Native scheduler: the appointment lives only in this database (book_native_slot). No Acuity call.
+  const nativeShop = await nativeShopFor(admin, draft);
+  const isNative = nativeShop.kind === "native";
+  let nativeRow: Record<string, any> | null = null;
+  if (isNative) {
+    // Retry after a partial failure: the same payment already produced an appointment.
+    const { data: prior } = await admin
+      .from("appointments")
+      .select("*")
+      .eq("shop_id", nativeShop.shopId)
+      .eq("payment_reference_id", paymentRef)
+      .eq("barber_id", draft.barber_id)
+      .eq("starts_at", new Date(String(draft.datetime)).toISOString())
+      .neq("status", "cancelled")
+      .limit(1)
+      .maybeSingle();
+    if (prior) {
+      console.log(`[commitDraft] ⟳ Native appointment ${prior.id} already exists for this payment — reusing`);
+      nativeRow = prior;
+    } else {
+      // Atomic claim (same column the Acuity path uses): one caller books; a claim older than 3 min is abandoned.
+      const staleBefore = new Date(Date.now() - 3 * 60_000).toISOString();
+      const { data: claimed } = await admin
+        .from("booking_drafts")
+        .update({ acuity_attempted_at: new Date().toISOString() })
+        .eq("id", draftId)
+        .eq("status", "pending")
+        .or(`acuity_attempted_at.is.null,acuity_attempted_at.lt.${staleBefore}`)
+        .select("id");
+      if (!claimed || claimed.length === 0) {
+        console.log(`[commitDraft] ⏸ Another attempt is booking natively — skipping`);
+        throw new Error("commit_in_progress");
+      }
+      const { data: booked, error: bookErr } = await admin.rpc("book_native_slot", {
+        _shop_id: nativeShop.shopId,
+        _barber_id: draft.barber_id,
+        _service_id: draft.service_ref_id,
+        _starts_at: new Date(String(draft.datetime)).toISOString(),
+        _client: {
+          client_id: clientIdFinal,
+          first_name: draft.first_name,
+          last_name: draft.last_name,
+          phone: phoneNorm,
+          email: contactEmail(draft.email),
+        },
+        _addon_ids: Array.isArray(draft.addon_ref_ids) ? draft.addon_ref_ids : [],
+        _notes: draft.notes || null,
+        _booking_source: draft.source === "client_app" ? "pwa" : "public_site",
+        _created_by_role: draft.source === "client_app" ? "client_app" : "public_site",
+        _created_by_user_id: draft.created_by_user_id ?? null,
+        _payment: {
+          paid: true,
+          payment_confirmed: true,
+          payment_method: paymentMethod,
+          amount_paid_cents: draft.total_cents != null ? Number(draft.total_cents) : 0,
+          tip_cents: Number(draft.tip_cents) || 0,
+          payment_reference_id: paymentRef,
+          stripe_payment_method_type: paymentMethod === "stripe" ? stripePmType : null,
+          applied_benefit_redemption_id: draft.applied_benefit_redemption_id ?? null,
+          benefit_discount_cents: Number(draft.benefit_discount_cents) || 0,
+        },
+        _price_cents: null,
+        _draft_id: draftId,
+        _recurring_group_id: null,
+        _label: null,
+        _as_staff: false,
+        _allow_overlap: false,
+      });
+      if (bookErr || !booked) {
+        const e = nativeRpcError(bookErr);
+        // Let a later retry try again, and never leave a paid draft without a trace.
+        await admin.from("booking_drafts").update({ acuity_attempted_at: null }).eq("id", draftId);
+        if (e instanceof BookingRejectedError) {
+          // Paid, but the slot is gone (or the rules no longer allow it): manual follow-up, no second booking.
+          await recordManualException(admin, draft, paymentMethod, paymentRef, "manual_refund_required", `Native booking rejected: ${e.reason}`);
+          throw new Error(`acuity_failed: ${e.reason}`);
+        }
+        await recordManualException(admin, draft, paymentMethod, paymentRef, "reconciliation_required", `Native booking failed: ${e.message}`);
+        throw new Error(`Native booking failed: ${e.message}`);
+      }
+      nativeRow = booked as Record<string, any>;
+    }
+    if (!nativeRow) throw new Error("Native booking returned no appointment");
+    const { data: barberRow } = await admin.from("barbers").select("name").eq("id", draft.barber_id).maybeSingle();
+    acuityData = {
+      id: undefined,
+      datetime: nativeRow.starts_at,
+      duration: nativeRow.duration_minutes,
+      firstName: draft.first_name,
+      lastName: draft.last_name || "",
+      email: draft.email,
+      phone: phoneNorm,
+      type: nativeRow.service_name,
+      appointmentTypeID: null,
+      price: ((Number(nativeRow.price_cents) || 0) / 100).toFixed(2),
+      calendar: barberRow?.name || "",
+    } as AcuityData;
+  }
+
+  if (!isNative && draft.acuity_id) {
     const got = await acuityFetch(`/appointments/${draft.acuity_id}`);
     const d = (got.data || {}) as AcuityData;
     if (got.ok && d?.id && !(d as { canceled?: boolean }).canceled) {
@@ -302,8 +404,8 @@ export async function commitDraft(
   }
 
   // Persist the Acuity id right away so any retry reuses it instead of POSTing again.
-  await admin.from("booking_drafts").update({ acuity_id: acuityData.id }).eq("id", draftId);
-  console.log(`[commitDraft] Acuity OK — acuityId=${acuityData.id}`);
+  if (!isNative) await admin.from("booking_drafts").update({ acuity_id: acuityData.id }).eq("id", draftId);
+  console.log(isNative ? `[commitDraft] Native booking OK — appointment=${nativeRow?.id}` : `[commitDraft] Acuity OK — acuityId=${acuityData.id}`);
 
   // ─── 5. Upsert appointments row ───
   const startsAt = String(acuityData.datetime);
@@ -314,13 +416,16 @@ export async function commitDraft(
     if (!result.ok) throw new Error(`Add-on catalog HTTP ${result.status}`);
     return result.data;
   }, (error) => console.warn("[commitDraft] Add-on names unresolved; preserving stored names", String(error)));
-  const addonNames = await resolveAddonNames(acuityData);
+  const addonNames = isNative ? undefined : await resolveAddonNames(acuityData as any);
   const priceCentsAcuity = Math.round(parseFloat(String(acuityData.price || "0")) * 100);
   const amountPaidCents = draft.total_cents != null ? Number(draft.total_cents) : priceCentsAcuity;
   const tipCents = Number(draft.tip_cents) || 0;
 
   console.log(`[commitDraft] Upserting appointments row`);
-  const { data: upserted, error: upsertErr } = await admin
+  // Native: book_native_slot already wrote the appointment row (with the payment fields).
+  const { data: upserted, error: upsertErr } = isNative && nativeRow
+    ? { data: { id: nativeRow.id as string }, error: null }
+    : await admin
     .from("appointments")
     .upsert(
       {
@@ -575,7 +680,7 @@ export async function commitDraft(
     success: true,
     alreadyCommitted: false,
     appointmentId: upserted.id,
-    acuityId: acuityData.id as number,
+    acuityId: (acuityData.id ?? null) as number | null,
     draft,
     appointment: {
       id: upserted.id,

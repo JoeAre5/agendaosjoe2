@@ -13,6 +13,7 @@
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { commitDraft } from "../_shared/commitDraft.ts";
+import { nativeQuote, nativeShopFor } from "../_shared/nativeDraft.ts";
 import { canAccessDraft, isAllowedReturnOrigin as guardOrigin } from "../_shared/accessGuards.ts";
 
 const BOOKING_HOLD_MINUTES = 30;
@@ -111,12 +112,17 @@ Deno.serve(async (req) => {
         return jsonRes({ error: "Invalid email" }, 400);
       }
 
+      // Native scheduler (shops.booking_provider = native): ids are local uuids, price and hours come
+      // from this database, and there is no Acuity call anywhere in the booking.
+      const nativeShop = await nativeShopFor(admin, null);
+      const isNative = nativeShop.kind === "native";
+
       // Resolve barber from calendar (validate the slot really maps to a known barber)
-      const { data: calRow, error: calErr } = await admin
-        .from("barbers")
-        .select("id, name")
-        .eq("acuity_calendar_id", calendarID)
-        .maybeSingle();
+      const calQuery = admin.from("barbers").select("id, name");
+      const { data: calRow, error: calErr } = await (isNative
+        ? calQuery.eq("id", String(calendarID)).eq("shop_id", nativeShop.shopId)
+        : calQuery.eq("acuity_calendar_id", calendarID)
+      ).maybeSingle();
       if (calErr) console.error("[prepare-draft] barbers lookup error:", calErr, "calendarID=", calendarID, typeof calendarID);
       if (!calRow?.id) {
         console.error("[prepare-draft] No barber for calendarID=", calendarID, "(", typeof calendarID, ") err=", calErr?.message);
@@ -156,7 +162,7 @@ Deno.serve(async (req) => {
       let serviceCents = 0;
       let serviceDurationMin = 0;
       let addonsDurationMin = 0;
-      {
+      if (!isNative) {
         let acuityPriceCents: number | null = null;
         try {
           // Acuity v1 has no /appointment-types/:id; read the full catalog.
@@ -193,7 +199,19 @@ Deno.serve(async (req) => {
       // Fallback to local `service_addons.price_cents` only when Acuity is
       // unreachable OR the addon doesn't exist in Acuity (legacy addons).
       let addonsCents = 0;
-      if (Array.isArray(addonIDs) && addonIDs.length > 0) {
+      if (isNative) {
+        const qte = await nativeQuote(admin, nativeShop.shopId, {
+          serviceId: String(appointmentTypeID),
+          barberId: calRow.id,
+          addonIds: Array.isArray(addonIDs) ? addonIDs.map((a: unknown) => String(a)) : [],
+          startsAt: String(datetime),
+        });
+        if (!qte.ok) return jsonRes({ error: qte.error === "slot_unavailable" ? "slot_taken" : qte.error }, qte.status);
+        serviceCents = qte.serviceCents;
+        addonsCents = qte.addonsCents;
+        serviceDurationMin = qte.totalDurationMinutes;
+      }
+      if (!isNative && Array.isArray(addonIDs) && addonIDs.length > 0) {
         const addonIdsNum = addonIDs.map((a: any) => Number(a)).filter((n: number) => Number.isFinite(n));
 
         // 1) Try Acuity first — one call returns all addons.
@@ -287,11 +305,18 @@ Deno.serve(async (req) => {
         .from("booking_drafts")
         .insert({
           source,
-          appointment_type_id: appointmentTypeID,
-          calendar_id: calendarID,
+          ...(isNative
+            ? {
+                shop_id: nativeShop.shopId,
+                service_ref_id: String(appointmentTypeID),
+                addon_ref_ids: Array.isArray(addonIDs) ? addonIDs.map((a: unknown) => String(a)) : [],
+                appointment_type_id: null,
+                calendar_id: null,
+              }
+            : { appointment_type_id: appointmentTypeID, calendar_id: calendarID }),
           barber_id: calRow.id,
           datetime: String(datetime),
-          addon_ids: Array.isArray(addonIDs) ? addonIDs : [],
+          addon_ids: !isNative && Array.isArray(addonIDs) ? addonIDs : [],
           notes: notes || null,
           client_id: resolvedClientId,
           first_name: String(firstName).trim().slice(0, 80),
@@ -475,7 +500,7 @@ Deno.serve(async (req) => {
 
       const { data: draft, error: dErr } = await admin
         .from("booking_drafts")
-        .select("id, status, expires_at, total_cents, client_id, first_name, last_name, email, phone, appointment_type_id")
+        .select("id, status, expires_at, total_cents, client_id, first_name, last_name, email, phone, appointment_type_id, service_ref_id")
         .eq("id", draftId)
         .maybeSingle();
       if (dErr || !draft) return jsonRes({ error: "draft_not_found" }, 404);
@@ -519,6 +544,9 @@ Deno.serve(async (req) => {
           .select("name")
           .eq("acuity_type_id", draft.appointment_type_id)
           .maybeSingle();
+        if (svc?.name) serviceName = svc.name as string;
+      } else if (draft.service_ref_id) {
+        const { data: svc } = await admin.from("services").select("name").eq("id", draft.service_ref_id).maybeSingle();
         if (svc?.name) serviceName = svc.name as string;
       }
 

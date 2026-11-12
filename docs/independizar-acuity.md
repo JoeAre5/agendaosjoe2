@@ -16,16 +16,36 @@ Pedido del cliente: que los servicios, los horarios y la disponibilidad dejen de
 ## Avance (12-nov-2026)
 | Pieza | Estado |
 |---|---|
-| Motor de disponibilidad y catálogo nativo (`_shared/availability`, `_shared/native`) | **Hecho.** Lee `booking_draft_holds` y respeta `overlap_exempt`. 26 pruebas. |
+| Motor de disponibilidad y catálogo nativo (`_shared/availability`, `_shared/native`) | **Hecho.** Lee `booking_draft_holds`, respeta `overlap_exempt`. 26 pruebas. |
 | Esquema (`drizzle/migrations/0022`) | **Hecho, sin aplicar.** Ids de Acuity opcionales, referencias nativas, índices. |
-| Funciones SQL de escritura (`0023`: `book_native_slot`, `reschedule_native_appointment`, `cancel_native_appointment`) | **Hecho, sin aplicar.** Solo service_role, mismo candado por barbero que las reservas temporales. **53 pruebas** sobre un Postgres en memoria (esquema mínimo, no el real). |
-| Servidor: `native-scheduling`, `availability`, `_shared/nativeBooking.ts`, `_shared/singleShop.ts` | **Hecho.** `deno check` sin errores. Sin desplegar. |
-| Frontend: capa de proveedor (`src/lib/scheduling`) y 10 pantallas conectadas a ella | **Hecho.** Con Acuity (por defecto) se comporta igual. 271 tests, tipos y build en verde. |
-| Pantallas con flujo nativo completo (crear, editar, walk-in, bloqueos, reserva del cliente) | **Pendiente.** Hoy las rutas con `acuity_id` ya usan `appointmentRef`, pero crear/editar cita siguen creando el espejo local pensado para Acuity. |
-| Editores de servicios y horarios (`ServiceEditorSheet`, `HoursEditor`, cambios en `Services` y `Availability`) | **Pendiente.** |
-| Pagos: reserva en línea nativa (`pay-then-book`, `commitDraft`, ATH, Stripe, PayPal) respetando saldo restante y `edit_line_items` | **Pendiente.** |
-| Sincronización con Acuity en modo nativo (`acuity-sync`, `acuity-webhook`, `useCalendarData`) | **Pendiente:** hay que apagarla por tienda. |
-| Migrar citas futuras y corte | **Pendiente**, con aprobación. |
+| Funciones SQL de escritura (`0023`): reservar, reprogramar, cancelar | **Hecho, sin aplicar.** Solo service_role, mismo candado por barbero que las reservas temporales; "reservar de todos modos" (solape confirmado por staff) y citas heredadas de Acuity manejables una vez la tienda es nativa. |
+| Herramientas de corte por tienda (`0024`): `native_cutover_check`, `switch_shop_to_native`, `switch_shop_to_acuity`, `native_backfill_service_refs` | **Hecho, sin aplicar.** Nada cambia solo; cada llamada se registra en `audit_log`. |
+| Pruebas de SQL (Postgres en memoria, esquema mínimo) | **76 comprobaciones en verde.** No es el esquema real. |
+| Servidor: `native-scheduling`, `availability`, `public-booking-create` (catálogo, horarios y reserva nativos), `seat-walkin`, `client-booking-refund`, `filho-agent` (cancelar) | **Hecho.** `deno check` sin errores nuevos. Sin desplegar. |
+| Reservas pagadas: `pay-then-book` (precio desde el catálogo local), `_shared/commitDraft` (rama nativa con `book_native_slot`, idempotente por pago), ATH Móvil y Stripe (etiquetas) | **Hecho en código, sin probar contra pasarelas.** Pagos fallidos o con horario ya tomado quedan como excepción manual; reembolsos siempre manuales. |
+| Sincronización con Acuity (`acuity-sync`, `acuity-webhook`, `acuity-block-sync`, `acuity-sync-services`) | **Hecho.** Se apagan solas cuando la tienda es nativa; con Acuity siguen igual. |
+| Frontend: capa de proveedor (`src/lib/scheduling`), 10 pantallas con flujo nativo, editores de servicios/complementos y horarios | **Hecho.** Con Acuity (por defecto) se comporta igual. 273 pruebas, tipos y build en verde. |
+| Probar contra un Supabase de prueba con el esquema real, pasarelas en modo prueba | **Pendiente. Bloquea el corte.** |
+| Corte real de la tienda | **Pendiente, requiere aprobación expresa.** |
+
+## Instructivo de corte (solo cuando se autorice)
+Todo esto se hace en un **proyecto de prueba** primero. En producción solo tras ensayo completo y con Charlie enterado.
+
+1. Aplicar `0022`, `0023` y `0024` (en ese orden) y desplegar las funciones (`native-scheduling`, `availability`, `public-booking-create`, `pay-then-book`, `seat-walkin`, `client-booking-refund`, `filho-agent`, y las cuatro `acuity-*` que ahora se apagan solas). La tienda sigue en `acuity`: nada cambia para nadie.
+2. Revisar el catálogo en el admin (servicios, complementos, horarios por barbero y de la tienda): hoy es el que sincronizó Acuity y pasa a ser la fuente de verdad.
+3. Chequeo previo (solo lectura), con service_role: `select native_cutover_check('<shop_id>');` — debe dar `ready: true` (barberos reservables con horario, servicios públicos, sin borradores abiertos).
+4. Ensayar el recorrido completo (ver "Pruebas obligatorias") en el proyecto de prueba con la tienda en nativo.
+5. Corte: `select switch_shop_to_native('<shop_id>', '<user_id>');` — comprueba, enlaza las citas futuras de Acuity con su servicio local y cambia el proveedor. Queda en `audit_log`.
+6. En Acuity: desactivar el link público de reservas y los webhooks (las funciones ya los ignoran, pero conviene cerrarlos).
+7. **Reversa:** `select switch_shop_to_acuity('<shop_id>', '<user_id>');` vuelve al modo Acuity y avisa cuántas citas futuras creadas de forma nativa no existen en Acuity (hay que pasarlas a mano).
+
+## Límites conocidos (sin ocultar nada)
+- Nada se ha aplicado a ninguna base ni desplegado. Todo se verificó con tipos, pruebas unitarias, `deno check` y un Postgres en memoria con esquema mínimo.
+- Los disparadores y restricciones reales de producción (por ejemplo `trg_guard_overlap_exempt`, el índice de solape exacto de `0018`) no se probaron contra la base real: "reservar de todos modos" podría chocar con ellos y hay que verlo en el ensayo.
+- Pagos (Stripe, ATH Móvil, PayPal) no se probaron contra las pasarelas; solo se adaptó el código que confirma la cita.
+- `filho-agent` (asistente) solo se adaptó en cancelar y reagendar; sus herramientas de catálogo están desactivadas en el código actual.
+- `cancel-appointments-bulk` y `consolidate-recurring` siguen siendo herramientas puntuales basadas en ids de Acuity.
+- La nómina, métricas del home y notificaciones se leen de las mismas tablas, pero hay que confirmarlo en el ensayo.
 
 ## Adaptaciones necesarias (lo que no se puede copiar tal cual)
 - **Contexto de tienda.** El código de Hasib usa `withShopScope`, `resolveRequestShop` y las funciones SQL `request_shop_id()` e `is_service_context()`, que vienen de su capa multi-tienda (`a1`) y **no existen aquí**. No se trae esa capa entera (es un RLS restrictivo sobre todas las tablas, demasiado riesgoso). Se crea un adaptador de una sola tienda: resuelve la tienda única de Charlie y devuelve el cliente tal cual. Mantiene la puerta abierta al multi-tienda futuro.

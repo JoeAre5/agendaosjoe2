@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
   console.log(`${LOG} Fetching draft`);
   const { data: draft, error: fetchErr } = await supabase
     .from("booking_drafts")
-    .select("id, status, phone, total_cents, tip_cents, expires_at, addon_ids, appointment_type_id, first_name, last_name")
+    .select("id, status, phone, total_cents, tip_cents, expires_at, addon_ids, appointment_type_id, service_ref_id, addon_ref_ids, first_name, last_name")
     .eq("id", draftId)
     .maybeSingle();
 
@@ -145,11 +145,11 @@ Deno.serve(async (req) => {
   const subtotalDollars = centsToDollars(subtotalCents);
 
   // Look up service name + price
-  const { data: service } = await supabase
-    .from("services")
-    .select("name, price_cents")
-    .eq("acuity_type_id", draft.appointment_type_id)
-    .maybeSingle();
+  // Native shops store the local service uuid (service_ref_id); Acuity shops the Acuity type id.
+  const { data: service } = await (draft.service_ref_id
+    ? supabase.from("services").select("name, price_cents").eq("id", draft.service_ref_id)
+    : supabase.from("services").select("name, price_cents").eq("acuity_type_id", draft.appointment_type_id)
+  ).maybeSingle();
 
   const serviceName = (service?.name || "Servicio").slice(0, SERVICE_NAME_MAX);
   const servicePriceCents = service?.price_cents ?? subtotalCents;
@@ -167,11 +167,12 @@ Deno.serve(async (req) => {
   ];
 
   // Add addons as additional line items
-  if (Array.isArray(draft.addon_ids) && draft.addon_ids.length > 0) {
-    const { data: addons } = await supabase
-      .from("service_addons")
-      .select("acuity_addon_id, name, price_cents")
-      .in("acuity_addon_id", draft.addon_ids);
+  const nativeAddonIds: string[] = Array.isArray(draft.addon_ref_ids) ? draft.addon_ref_ids : [];
+  if (nativeAddonIds.length > 0 || (Array.isArray(draft.addon_ids) && draft.addon_ids.length > 0)) {
+    const { data: addons } = await (nativeAddonIds.length > 0
+      ? supabase.from("service_addons").select("name, price_cents").in("id", nativeAddonIds)
+      : supabase.from("service_addons").select("name, price_cents").in("acuity_addon_id", draft.addon_ids)
+    );
 
     if (addons && addons.length > 0) {
       for (const addon of addons) {

@@ -10,6 +10,7 @@
 // Auth: requires owner role.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isNativeMode } from "../_shared/nativeDraft.ts";
 import { utcIsoToAcuityDatetime } from "../_shared/timezone.ts";
 
 const corsHeaders = {
@@ -38,6 +39,10 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    // Native scheduler: the database is the source of truth; Acuity events must not rewrite it.
+    if (await isNativeMode(supabase)) {
+      return new Response(JSON.stringify({ skipped: true, reason: "native_provider" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     const authHeader = req.headers.get("Authorization") || "";
     const token = authHeader.replace("Bearer ", "");
 

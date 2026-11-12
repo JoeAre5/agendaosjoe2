@@ -2,6 +2,7 @@ import { preserveItemizedEdit, readEditItems } from "../_shared/appointmentEditI
 import { createAcuityAddonResolver } from "../_shared/acuityAddons.ts";
 import { preserveFranciscoName } from "../_shared/acuityClientName.ts";
 import { contactEmail } from "../_shared/contactEmail.ts";
+import { isNativeMode } from "../_shared/nativeDraft.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -30,6 +31,11 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // Native scheduler: the database is the source of truth; Acuity events must not rewrite it.
+    if (await isNativeMode(supabaseAdmin)) {
+      return new Response(JSON.stringify({ skipped: true, reason: "native_provider" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     const supabaseAuth = createClient(
       Deno.env.get("SUPABASE_URL")!,
