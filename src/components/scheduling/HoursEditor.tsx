@@ -218,7 +218,7 @@ export function HoursEditor({
             style={{ borderBottom: dow < 6 ? "1px solid var(--border-color, rgba(127,127,127,0.2))" : undefined, opacity: d.active ? 1 : 0.6 }}
           >
             {d.ranges.map((r, idx) => (
-              <div key={idx} className="flex items-center gap-3 py-0.5">
+              <div key={idx} className="flex items-center gap-2 py-0.5">
                 <span className="w-9 text-sm font-medium">{idx === 0 ? days[dow] : ""}</span>
                 {idx === 0 ? (
                   <Switch checked={d.active} disabled={!editable} onCheckedChange={(v) => patchDay(dow, { active: v })} />
@@ -230,7 +230,7 @@ export function HoursEditor({
                   value={r.start}
                   disabled={!d.active || !editable}
                   onChange={(e) => patchRange(dow, idx, { start: e.target.value })}
-                  className="flex-1 min-w-0 rounded-md border px-2 py-1 text-sm"
+                  className="flex-1 min-w-0 rounded-md border px-1.5 py-1 text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
                   style={timeInputStyle}
                 />
                 <span className="text-xs" style={{ color: "var(--text-secondary)" }}>–</span>
@@ -239,7 +239,7 @@ export function HoursEditor({
                   value={r.end}
                   disabled={!d.active || !editable}
                   onChange={(e) => patchRange(dow, idx, { end: e.target.value })}
-                  className="flex-1 min-w-0 rounded-md border px-2 py-1 text-sm"
+                  className="flex-1 min-w-0 rounded-md border px-1.5 py-1 text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
                   style={timeInputStyle}
                 />
                 {d.ranges.length > 1 && editable && d.active ? (
@@ -252,12 +252,12 @@ export function HoursEditor({
                     <X size={14} />
                   </button>
                 ) : (
-                  <span className="w-[22px]" />
+                  <span className="w-4" />
                 )}
               </div>
             ))}
             {d.active && editable && (
-              <div className="flex flex-wrap gap-x-3 gap-y-1 pl-[52px] pt-1">
+              <div className="flex flex-wrap gap-x-3 gap-y-1 pl-[44px] pt-1">
                 <button className={linkBtn} style={{ color: "var(--accent-color)" }} onClick={() => addRange(dow)}>
                   <Plus size={11} className="inline -mt-0.5" /> {t(language, "Rango", "Range")}
                 </button>
