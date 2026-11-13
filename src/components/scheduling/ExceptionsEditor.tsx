@@ -44,7 +44,7 @@ export function ExceptionsEditor({
   );
   const scopes = useMemo(
     () => [
-      ...(canEditShop ? [{ id: ALL, label: t(language, "Todos los barberos", "All barbers") }] : []),
+      ...(canEditShop ? [{ id: ALL, label: t(language, "Todos", "Everyone") }] : []),
       ...editableBarbers.map((b) => ({ id: b.id, label: b.name })),
     ],
     [canEditShop, editableBarbers, language],
