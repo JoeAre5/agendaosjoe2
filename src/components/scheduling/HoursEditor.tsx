@@ -218,19 +218,20 @@ export function HoursEditor({
             style={{ borderBottom: dow < 6 ? "1px solid var(--border-color, rgba(127,127,127,0.2))" : undefined, opacity: d.active ? 1 : 0.6 }}
           >
             {d.ranges.map((r, idx) => (
-              <div key={idx} className="flex items-center gap-1.5 py-0.5">
-                <span className="w-9 text-sm font-medium">{idx === 0 ? days[dow] : ""}</span>
+              <div key={idx} className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5 py-0.5">
+                <span className={`w-9 text-sm font-medium ${idx === 0 ? "" : "max-sm:hidden"}`}>{idx === 0 ? days[dow] : ""}</span>
                 {idx === 0 ? (
                   <Switch checked={d.active} disabled={!editable} onCheckedChange={(v) => patchDay(dow, { active: v })} />
                 ) : (
-                  <span className="w-[44px]" />
+                  <span className="w-[44px] max-sm:hidden" />
                 )}
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 max-sm:basis-full">
                 <input
                   type="time"
                   value={r.start}
                   disabled={!d.active || !editable}
                   onChange={(e) => patchRange(dow, idx, { start: e.target.value })}
-                  className="flex-1 min-w-0 rounded-md border px-1 py-1 text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
+                  className="flex-1 min-w-0 rounded-md border px-2 py-1 text-sm"
                   style={timeInputStyle}
                 />
                 <span className="text-xs" style={{ color: "var(--text-secondary)" }}>–</span>
@@ -239,7 +240,7 @@ export function HoursEditor({
                   value={r.end}
                   disabled={!d.active || !editable}
                   onChange={(e) => patchRange(dow, idx, { end: e.target.value })}
-                  className="flex-1 min-w-0 rounded-md border px-1 py-1 text-sm max-sm:[&::-webkit-calendar-picker-indicator]:hidden"
+                  className="flex-1 min-w-0 rounded-md border px-2 py-1 text-sm"
                   style={timeInputStyle}
                 />
                 {d.ranges.length > 1 && editable && d.active ? (
@@ -254,10 +255,11 @@ export function HoursEditor({
                 ) : (
                   <span className="w-4" />
                 )}
+                </div>
               </div>
             ))}
             {d.active && editable && (
-              <div className="flex flex-wrap gap-x-3 gap-y-1 pl-[42px] pt-1">
+              <div className="flex flex-wrap gap-x-3 gap-y-1 pl-[42px] pt-1 max-sm:pl-0">
                 <button className={linkBtn} style={{ color: "var(--accent-color)" }} onClick={() => addRange(dow)}>
                   <Plus size={11} className="inline -mt-0.5" /> {t(language, "Rango", "Range")}
                 </button>
