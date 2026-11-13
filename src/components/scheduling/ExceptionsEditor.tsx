@@ -4,7 +4,7 @@
 // without touching the weekly schedule. An exception REPLACES the weekly hours of that date for its
 // scope; appointments that already exist that day are NOT cancelled, the day just stops being offered.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Trash2, X } from "lucide-react";
+import { CalendarDays, ChevronDown, Loader2, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { formatInTimeZone } from "date-fns-tz";
 import { supabase } from "@/integrations/supabase/client";
@@ -156,6 +156,13 @@ export function ExceptionsEditor({
   // salvo que se les quite el estilo nativo; el selector de fecha del sistema se abre igual al tocarlos.
   const pickerStyle = { ...inputStyle, WebkitAppearance: "none", appearance: "none", display: "block", minWidth: 0, maxWidth: "100%", textAlign: "left" } as const;
   const pickerClass = "[&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:p-0";
+  // Fecha y "Aplica a": Safari de iPhone no centra verticalmente el texto de estos campos nativos. Se dibuja una caja
+  // propia (texto centrado con flex) y encima va el campo nativo transparente, que abre el selector del sistema al tocar.
+  const fieldBox = `${input} flex w-full items-center justify-between gap-2`;
+  const dateLabel = date
+    ? new Date(`${date}T12:00:00`).toLocaleDateString(language === "es" ? "es-PR" : "en-US", { day: "numeric", month: "short", year: "numeric" })
+    : "—";
+  const scopeLabel = scopes.find((s) => s.id === scope)?.label ?? "";
 
   return (
     <div className="px-4 pb-4">
@@ -182,17 +189,48 @@ export function ExceptionsEditor({
           <div className="grid grid-cols-2 gap-3">
             <label className="block min-w-0 text-xs">
               <span style={{ color: "var(--text-secondary)" }}>{t(language, "Fecha", "Date")}</span>
-              <input type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} className={`${input} ${pickerClass} w-full mt-1.5`} style={pickerStyle} />
+              <div className="relative mt-1.5">
+                <div className={fieldBox} style={inputStyle}>
+                  <span className="truncate">{dateLabel}</span>
+                  <CalendarDays size={16} className="shrink-0" style={{ color: "var(--text-secondary)" }} />
+                </div>
+                <input
+                  type="date"
+                  aria-label={t(language, "Fecha", "Date")}
+                  min={today}
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  onClick={(e) => {
+                    try {
+                      e.currentTarget.showPicker?.();
+                    } catch {
+                      /* el navegador no permite abrirlo desde aqui: el toque nativo lo abre */
+                    }
+                  }}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </div>
             </label>
             <label className="block min-w-0 text-xs">
               <span style={{ color: "var(--text-secondary)" }}>{t(language, "Aplica a", "Applies to")}</span>
-              <select value={scope} onChange={(e) => setScope(e.target.value)} className={`${input} w-full mt-1.5`} style={inputStyle}>
-                {scopes.map((s) => (
-                  <option key={s.id} value={s.id} style={{ color: "#000" }}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+              <div className="relative mt-1.5">
+                <div className={fieldBox} style={inputStyle}>
+                  <span className="truncate">{scopeLabel}</span>
+                  <ChevronDown size={16} className="shrink-0" style={{ color: "var(--text-secondary)" }} />
+                </div>
+                <select
+                  aria-label={t(language, "Aplica a", "Applies to")}
+                  value={scope}
+                  onChange={(e) => setScope(e.target.value)}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                >
+                  {scopes.map((s) => (
+                    <option key={s.id} value={s.id} style={{ color: "#000" }}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </label>
           </div>
 
