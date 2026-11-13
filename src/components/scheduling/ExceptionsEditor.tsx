@@ -152,6 +152,10 @@ export function ExceptionsEditor({
   if (scopes.length === 0) return null;
   const input = "rounded-lg border px-3 h-11 text-sm box-border";
   const inputStyle = { background: "transparent", color: "var(--text-primary)", borderColor: "var(--border-color, #444)" } as const;
+  // Safari de iPhone ignora el ancho de los campos de fecha/hora (texto centrado y borde que se sale de su columna)
+  // salvo que se les quite el estilo nativo; el selector de fecha del sistema se abre igual al tocarlos.
+  const pickerStyle = { ...inputStyle, WebkitAppearance: "none", appearance: "none", display: "block", minWidth: 0, maxWidth: "100%", textAlign: "left" } as const;
+  const pickerClass = "[&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:p-0";
 
   return (
     <div className="px-4 pb-4">
@@ -178,7 +182,7 @@ export function ExceptionsEditor({
           <div className="grid grid-cols-2 gap-3">
             <label className="block min-w-0 text-xs">
               <span style={{ color: "var(--text-secondary)" }}>{t(language, "Fecha", "Date")}</span>
-              <input type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} className={`${input} w-full mt-1.5`} style={inputStyle} />
+              <input type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} className={`${input} ${pickerClass} w-full mt-1.5`} style={pickerStyle} />
             </label>
             <label className="block min-w-0 text-xs">
               <span style={{ color: "var(--text-secondary)" }}>{t(language, "Aplica a", "Applies to")}</span>
@@ -212,9 +216,9 @@ export function ExceptionsEditor({
             <div className="space-y-2">
               {ranges.map((r, idx) => (
                 <div key={idx} className="flex items-center gap-2">
-                  <input type="time" value={r.start} onChange={(e) => setRanges(ranges.map((x, i) => (i === idx ? { ...x, start: e.target.value } : x)))} className={`${input} flex-1 min-w-0`} style={inputStyle} />
+                  <input type="time" value={r.start} onChange={(e) => setRanges(ranges.map((x, i) => (i === idx ? { ...x, start: e.target.value } : x)))} className={`${input} ${pickerClass} flex-1 min-w-0`} style={pickerStyle} />
                   <span className="text-xs" style={{ color: "var(--text-secondary)" }}>–</span>
-                  <input type="time" value={r.end} onChange={(e) => setRanges(ranges.map((x, i) => (i === idx ? { ...x, end: e.target.value } : x)))} className={`${input} flex-1 min-w-0`} style={inputStyle} />
+                  <input type="time" value={r.end} onChange={(e) => setRanges(ranges.map((x, i) => (i === idx ? { ...x, end: e.target.value } : x)))} className={`${input} ${pickerClass} flex-1 min-w-0`} style={pickerStyle} />
                   {ranges.length > 1 && (
                     <button onClick={() => setRanges(ranges.filter((_, i) => i !== idx))} aria-label={t(language, "Quitar rango", "Remove range")} style={{ color: "var(--text-secondary)" }}>
                       <X size={14} />
