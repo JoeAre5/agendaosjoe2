@@ -3,7 +3,8 @@
 //
 //   POST { event_id }                 -> envia ese evento (lo llama el disparador via pg_net)
 //   POST { sweep: true }              -> reintenta los pendientes vencidos (lo llama el cron cada 5 min)
-//   POST { test: { endpoint_id } }    -> (solo dueño) envia un evento de ejemplo a un destino
+//   POST { test: { endpoint_id, event_type? } } -> envia un EJEMPLO COMPLETO de ese tipo a un destino (por defecto
+//                                       booking.created). Lo puede llamar un dueño (JWT) o la base (send_test_webhook, 0028).
 //
 // Autenticacion: x-internal-secret (cron / base de datos) o JWT de un dueño para "test".
 // Cada envio lleva:  X-Webhook-Event, X-Webhook-Id (id del evento, sirve para deduplicar) y, si el
@@ -44,6 +45,17 @@ export function endpointMatches(ep: { event_types: string[] | null; shop_id: str
   if (ep.shop_id && ep.shop_id !== shopId) return false;
   const types = ep.event_types ?? [];
   return types.includes("*") || types.includes(eventType);
+}
+
+/** Tipos de evento para los que existe un ejemplo completo (outbound_sample_event, migracion 0028). */
+export const SAMPLE_EVENT_TYPES = [
+  "booking.created", "booking.rescheduled", "booking.updated", "booking.cancelled", "booking.no_show", "booking.paid",
+  "service.created", "service.updated", "service.deleted", "addon.created", "addon.updated", "addon.deleted",
+];
+
+/** booking.* -> appointment, service.* -> service, addon.* -> addon (igual que los eventos reales). */
+export function sampleEntityType(eventType: string): string {
+  return eventType.startsWith("booking.") ? "appointment" : eventType.startsWith("service.") ? "service" : "addon";
 }
 
 async function postToEndpoint(ep: any, event: any): Promise<{ ok: boolean; http_status: number | null; error?: string }> {
@@ -123,26 +135,28 @@ if (import.meta.main) {
       if (!internal && !(await isOwnerCaller(req, admin))) return unauthorizedResponse(corsHeaders);
       const { data: ep } = await admin.from("outbound_webhook_endpoints").select("*").eq("id", body.test.endpoint_id).maybeSingle();
       if (!ep) return jsonRes({ error: "endpoint_not_found" }, 404);
+      const eventType = String(body.test.event_type ?? "booking.created");
+      if (!SAMPLE_EVENT_TYPES.includes(eventType)) return jsonRes({ error: "unknown_event_type", allowed: SAMPLE_EVENT_TYPES }, 400);
+      let shopId: string | null = ep.shop_id ?? null;
+      if (!shopId) {
+        const { data: shop } = await admin.from("shops").select("id").order("created_at", { ascending: true }).limit(1).maybeSingle();
+        shopId = shop?.id ?? null;
+      }
+      if (!shopId) return jsonRes({ error: "shop_not_found" }, 404);
+      // Ejemplo completo, armado en la base con la misma funcion que usan los eventos reales (0028).
+      const { data: sampleData, error: sampleErr } = await admin.rpc("outbound_sample_event", { _event_type: eventType, _shop_id: shopId });
+      if (sampleErr || !sampleData) return jsonRes({ error: "sample_failed", detail: sampleErr?.message ?? null }, 500);
       const sample = {
         id: crypto.randomUUID(),
-        event_type: "booking.created",
+        event_type: eventType,
         created_at: new Date().toISOString(),
-        shop_id: ep.shop_id,
-        entity_type: "appointment",
+        shop_id: shopId,
+        entity_type: sampleEntityType(eventType),
         entity_id: crypto.randomUUID(),
-        data: {
-          test: true,
-          appointment_id: "00000000-0000-0000-0000-000000000000",
-          status: "scheduled",
-          starts_at: new Date(Date.now() + 86_400_000).toISOString(),
-          service: { id: null, name: "Corte (ejemplo)" },
-          barber: { id: null, name: "Barbero de ejemplo" },
-          client: { id: null, name: "Cliente Ejemplo", first_name: "Cliente", last_name: "Ejemplo", email: "ejemplo@example.com", phone: "7875550100" },
-          price_cents: 2500, paid: false,
-        },
+        data: sampleData,
       };
       const r = await postToEndpoint(ep, sample);
-      return jsonRes({ ok: r.ok, http_status: r.http_status, error: r.error ?? null });
+      return jsonRes({ ok: r.ok, event_type: eventType, http_status: r.http_status, error: r.error ?? null });
     }
 
     if (!internal) return unauthorizedResponse(corsHeaders);

@@ -1,5 +1,5 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { backoffMinutes, endpointMatches, hmacHex } from "./index.ts";
+import { backoffMinutes, endpointMatches, hmacHex, SAMPLE_EVENT_TYPES, sampleEntityType } from "./index.ts";
 
 Deno.test("hmacHex: vector conocido de HMAC-SHA256", async () => {
   // Vector de RFC 4231 (caso 2): clave "Jefe", mensaje "what do ya want for nothing?"
@@ -28,4 +28,19 @@ Deno.test("endpointMatches: '*', tipos concretos, tienda e inactivos", () => {
   assert(endpointMatches(ep({ shop_id: "s1" }), "booking.created", "s1"));
   assert(!endpointMatches(ep({ shop_id: "s2" }), "booking.created", "s1"));
   assert(!endpointMatches(ep({ event_types: [] }), "booking.created", "s1"));
+});
+
+Deno.test("ejemplos completos: un tipo por cada evento que emiten los disparadores (0025)", () => {
+  assertEquals(
+    [...SAMPLE_EVENT_TYPES].sort(),
+    ["addon.created", "addon.deleted", "addon.updated", "booking.cancelled", "booking.created", "booking.no_show",
+     "booking.paid", "booking.rescheduled", "booking.updated", "service.created", "service.deleted", "service.updated"],
+  );
+});
+
+Deno.test("sampleEntityType: igual que el tipo de entidad de los eventos reales", () => {
+  assertEquals(sampleEntityType("booking.rescheduled"), "appointment");
+  assertEquals(sampleEntityType("service.updated"), "service");
+  assertEquals(sampleEntityType("addon.deleted"), "addon");
+  for (const t of SAMPLE_EVENT_TYPES) assert(["appointment", "service", "addon"].includes(sampleEntityType(t)));
 });
