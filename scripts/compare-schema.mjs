@@ -19,29 +19,35 @@ if (!colsFile || !funcsFile) {
   process.exit(2);
 }
 
+// Acepta la salida de la CLI ({ ..., "rows": [...] }) y tambien un arreglo JSON exportado desde el
+// editor SQL de Supabase ("Copy as JSON" / descarga JSON): [ { "t": "...", "c": "..." }, ... ].
 function readRows(file) {
   const raw = fs.readFileSync(file, "utf8");
-  const json = JSON.parse(raw.slice(raw.indexOf("{")));
-  return json.rows ?? json;
+  const json = JSON.parse(raw.slice(raw.search(/[[{]/)));
+  return Array.isArray(json) ? json : (json.rows ?? json);
 }
 
 const types = fs.readFileSync(typesFile, "utf8");
 
-/** Tablas y columnas que declara la app (bloque Row de cada tabla de public). */
+/** Tablas y vistas (con sus columnas) que declara la app: bloques Tables y Views de public, campo Row. */
 function typedTables() {
-  const start = types.indexOf("    Tables: {");
-  const end = types.indexOf("    Views: {", start);
   const out = {};
-  let cur = null;
-  let inRow = false;
-  for (const line of types.slice(start, end).split("\n")) {
-    const t = line.match(/^      ([a-z_0-9]+): \{$/);
-    if (t) { cur = t[1]; out[cur] = []; continue; }
-    if (/^        Row: \{$/.test(line)) { inRow = true; continue; }
-    if (inRow && /^        \}$/.test(line)) { inRow = false; continue; }
-    if (inRow && cur) {
-      const c = line.match(/^          ([a-z_0-9]+)\??: /);
-      if (c) out[cur].push(c[1]);
+  const sections = [["    Tables: {", "    Views: {"], ["    Views: {", "    Functions: {"]];
+  for (const [from, to] of sections) {
+    const start = types.indexOf(from);
+    const end = types.indexOf(to, start);
+    if (start < 0 || end < 0) continue;
+    let cur = null;
+    let inRow = false;
+    for (const line of types.slice(start, end).split("\n")) {
+      const t = line.match(/^      ([a-z_0-9]+): \{$/);
+      if (t) { cur = t[1]; out[cur] = []; continue; }
+      if (/^        Row: \{$/.test(line)) { inRow = true; continue; }
+      if (inRow && /^        \}$/.test(line)) { inRow = false; continue; }
+      if (inRow && cur) {
+        const c = line.match(/^          ([a-z_0-9]+)\??: /);
+        if (c) out[cur].push(c[1]);
+      }
     }
   }
   return out;
@@ -66,7 +72,7 @@ for (const [table, cols] of Object.entries(typedTables())) {
 }
 const missingFunctions = typedFunctions().filter((f) => !dbFuncs.has(f));
 
-console.log(`Tablas que faltan:    ${missingTables.length ? missingTables.join(", ") : "ninguna"}`);
+console.log(`Tablas/vistas que faltan: ${missingTables.length ? missingTables.join(", ") : "ninguna"}`);
 console.log(`Columnas que faltan:  ${missingColumns.length ? "\n  " + missingColumns.join("\n  ") : "ninguna"}`);
 console.log(`Funciones que faltan: ${missingFunctions.length ? missingFunctions.join(", ") : "ninguna"}`);
 process.exit(missingTables.length + missingColumns.length + missingFunctions.length > 0 ? 1 : 0);
