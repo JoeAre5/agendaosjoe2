@@ -1,4 +1,5 @@
-// One-shot admin tool: cancel a list of appointments by acuity_id.
+// One-shot admin tool: cancel a list of appointments by acuity_id (Acuity shops) or by appointment_ids (native shops).
+// Native shops: each id is cancelled with cancel_native_appointment (the row is kept with status 'cancelled'; nothing is deleted).
 // - Cancels in Acuity (PUT /appointments/{id}/cancel?admin=true&noEmail=true)
 // - Marks local row status='cancelled'
 // Auth: service-role key required (via service-role JWT in Authorization header).
@@ -46,23 +47,77 @@ Deno.serve(async (req) => {
     }
     const body = await req.json();
     const acuityIds: number[] = Array.isArray(body.acuity_ids) ? body.acuity_ids : [];
+    // Tiendas con agenda nativa: ids locales (appointments.id). Se cancelan como una cita individual y NO se borran.
+    const appointmentIds: string[] = Array.isArray(body.appointment_ids)
+      ? body.appointment_ids.filter((x: unknown): x is string => typeof x === "string" && x.length > 0)
+      : [];
     const reason: string = body.reason || "Duplicate of recurring protocol";
 
-    if (acuityIds.length === 0) {
-      return new Response(JSON.stringify({ error: "acuity_ids required" }), {
+    if (acuityIds.length === 0 && appointmentIds.length === 0) {
+      return new Response(JSON.stringify({ error: "acuity_ids or appointment_ids required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const result = {
-      total: acuityIds.length,
+      total: acuityIds.length + appointmentIds.length,
       acuityCancelled: 0,
       acuityAlreadyCancelled: 0,
       acuityFailed: 0,
+      nativeCancelled: 0,
+      nativeFailed: 0,
       localCancelled: 0,
       details: [] as any[],
     };
+
+    for (const appointmentId of appointmentIds) {
+      try {
+        const { data: row } = await supabase
+          .from("appointments")
+          .select("id, client_id, status, starts_at, service_name, recurring_group_id")
+          .eq("id", appointmentId)
+          .maybeSingle();
+        if (!row) {
+          result.nativeFailed++;
+          result.details.push({ appointment_id: appointmentId, error: "appointment_not_found" });
+          continue;
+        }
+        const { data: cancelled, error: cancelErr } = await supabase.rpc("cancel_native_appointment", {
+          _appointment_id: row.id,
+          _reason: reason,
+          _cancelled_by_role: "owner",
+          _actor_user_id: userData.user.id,
+        });
+        if (cancelErr || !cancelled) {
+          result.nativeFailed++;
+          result.details.push({ appointment_id: appointmentId, error: cancelErr?.message ?? "native_cancel_failed" });
+          continue;
+        }
+        result.nativeCancelled++;
+        result.localCancelled++;
+        if (row.client_id && row.status === "scheduled" && row.starts_at) {
+          try {
+            await queueOrDispatchRecurringPush({
+              admin: supabase,
+              client_id: row.client_id,
+              appointment_id: row.id,
+              recurring_group_id: (row as any).recurring_group_id ?? null,
+              template_name: "appointment_cancelled_by_shop",
+              starts_at: String(row.starts_at),
+              service: row.service_name || null,
+              barber: null,
+              event_key: `appt:${row.id}:cancel`,
+            });
+          } catch (pushErr) {
+            console.warn("[cancel-bulk] native push dispatch failed:", pushErr);
+          }
+        }
+      } catch (err) {
+        result.nativeFailed++;
+        result.details.push({ appointment_id: appointmentId, exception: String(err) });
+      }
+    }
 
     for (const acuityId of acuityIds) {
       try {

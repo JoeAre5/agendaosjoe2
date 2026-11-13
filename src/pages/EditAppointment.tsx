@@ -51,6 +51,7 @@ import RecurringProgressModal, { type ProgressAction } from "@/components/Recurr
 import { findMatchingClient, relinkAppointment, type ClientMatch } from "@/lib/clientMatching";
 import { ClientMatchConfirmDialog } from "@/components/ClientMatchConfirmDialog";
 import { schedulingProxy as acuityProxy, appointmentRef, getShopProvider, useShopProvider } from "@/lib/scheduling";
+import { nativeAddonRefIds, parseSavedAddonId } from "@/lib/scheduling/addonIds";
 
 /* ─── barber identity colors ─── */
 const BARBER_COLORS: Record<string, string> = {
@@ -562,7 +563,8 @@ export default function EditAppointment() {
         // Pre-select addons
         const savedItems = readEditItems(a.edit_line_items);
         if (savedItems) {
-          setEditAddonIds(savedItems.filter((i) => i.kind === "addon").map((i) => Number(i.id)));
+          // Acuity: enteros; tienda nativa: uuid (Number(uuid) daba NaN y el complemento desaparecia al reabrir)
+          setEditAddonIds(savedItems.filter((i) => i.kind === "addon").map((i) => parseSavedAddonId(i.id) as number));
         } else if (acuity?.addonIDs?.length) {
           setEditAddonIds(acuity.addonIDs);
         }
@@ -880,6 +882,8 @@ export default function EditAppointment() {
             price_cents: finalPriceCents,
             paid: newPaid,
             addons: finalAddonNames,
+            // Tienda nativa: la lista de ids queda alineada con los nombres (la usan reprogramar, editar y los webhooks)
+            ...(nativeNow ? { addon_ref_ids: nativeAddonRefIds(editAddonIds) } : {}),
             starts_at: newStartsAt,
             ends_at: newEndsAt,
             client_name: clientChanged ? editClientFullName : target.client_name,
