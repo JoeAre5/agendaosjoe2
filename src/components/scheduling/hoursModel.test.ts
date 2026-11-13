@@ -47,3 +47,20 @@ describe("hoursModel", () => {
     expect(splitLunch(d)).toBe(d);
   });
 });
+
+describe("hoursModel con datos reales (la base de Charlie trae 6 filas repetidas por dia)", () => {
+  const r = (id: string, d: number, s: string, e: string) => ({ id, day_of_week: d, start_time: s, end_time: e, is_active: true });
+
+  it("seis filas identicas 09:00-17:00 se muestran como un solo rango y conservan todos los ids para limpiar", () => {
+    const w = weekFromRows(["a", "b", "c", "d", "e", "f"].map((id) => r(id, 2, "09:00:00", "17:00:00")));
+    expect(w[2].ranges).toEqual([{ id: "a", start: "09:00", end: "17:00" }]);
+    expect(w[2].origIds).toHaveLength(6); // al guardar se borran las 5 sobrantes
+    expect(dayProblem(w[2])).toBeNull();
+  });
+
+  it("filas contiguas se unen; con almuerzo de por medio siguen siendo dos rangos", () => {
+    expect(weekFromRows([r("a", 3, "09:00:00", "12:00:00"), r("b", 3, "12:00:00", "17:00:00")])[3].ranges).toEqual([{ id: "a", start: "09:00", end: "17:00" }]);
+    const lunch = weekFromRows([r("a", 3, "09:00:00", "12:00:00"), r("b", 3, "13:00:00", "17:00:00"), r("c", 3, "09:00:00", "12:00:00")]);
+    expect(lunch[3].ranges.map((x) => `${x.start}-${x.end}`)).toEqual(["09:00-12:00", "13:00-17:00"]);
+  });
+});

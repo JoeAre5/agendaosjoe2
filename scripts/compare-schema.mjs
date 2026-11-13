@@ -30,6 +30,9 @@ function readRows(file) {
 
 // CSV del boton "Export CSV" del editor SQL: primera fila = nombres de columna (t,c o p).
 function parseCsv(text) {
+  // El editor SQL de Lovable exporta con ";"; otros con ",": se detecta por la fila de encabezado.
+  const header = text.split(/\r?\n/, 1)[0] ?? "";
+  const delim = header.includes(";") && !header.includes(",") ? ";" : ",";
   const rows = [];
   let row = [];
   let cell = "";
@@ -41,7 +44,7 @@ function parseCsv(text) {
       else if (ch === '"') quoted = false;
       else cell += ch;
     } else if (ch === '"') quoted = true;
-    else if (ch === ",") { row.push(cell); cell = ""; }
+    else if (ch === delim) { row.push(cell); cell = ""; }
     else if (ch === "\n" || ch === "\r") {
       if (ch === "\r" && text[i + 1] === "\n") i++;
       row.push(cell); cell = "";

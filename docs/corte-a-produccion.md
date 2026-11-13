@@ -70,3 +70,12 @@ UPDATE public.outbound_webhook_config SET app_booking_emails = false;   -- encen
 - "Reservar de todos modos" (solape confirmado por el staff) podría chocar con restricciones reales de la base (`trg_guard_overlap_exempt`, índice de `0018`); verlo en el ensayo.
 - La integración heredada de GoHighLevel (`ghl_sync_queue`) tiene la URL de producción escrita a mano y llama a `extensions.http_post`; comprobar si realmente envía antes de usar ambas vías.
 - `filho-agent` solo se adaptó en cancelar y reagendar; `cancel-appointments-bulk` y `consolidate-recurring` siguen basados en ids de Acuity.
+
+## Hallazgos en la base real de Charlie (lectura, 13-nov-2026)
+Tomados con consultas de solo lectura desde el editor SQL de su proyecto en Lovable.
+- **Tienda:** una sola fila en `shops`, activa, `charlies-barbershop`, zona `America/Puerto_Rico`, `booking_provider = 'acuity'`. Es lo que la agenda nativa necesita.
+- **Extensiones:** `pg_net`, `pg_cron` y `supabase_vault`. Solo existe `net.http_post` (no `extensions.http_post`): la integración heredada de GoHighLevel (`enqueue_ghl_event`) falla en silencio también en producción; los webhooks nuevos (0025) usan `net.http_post`.
+- **Esquema:** 1.342 columnas y 178 funciones (mi reconstrucción de prueba, sin las migraciones propias, es muy parecida). Pendiente el detalle nombre por nombre con `scripts/compare-schema.mjs`.
+- **Horarios:** 4 barberos, de los cuales 3 tienen horario martes a sábado, 9:00–17:00, con **6 filas repetidas por día** (90 filas de barbero y 30 de tienda). El editor de horarios las muestra como un solo rango y, al guardar, borra las sobrantes. Sin almuerzo configurado.
+- **Reglas de reserva:** hay **3 filas globales idénticas** (intervalo 15 min, anticipación mínima 60 min, 90 días). Para pasar a 30 minutos hay que actualizar las tres: `UPDATE public.booking_rules SET slot_interval_minutes = 30 WHERE scope = 'global';`
+- **Citas:** 206 citas futuras, todas con `acuity_id`. Al cortar se enlazan con su servicio local (`native_backfill_service_refs`); falta comprobar cuántas no encuentran su servicio.

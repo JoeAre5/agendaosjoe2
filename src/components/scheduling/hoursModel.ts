@@ -52,7 +52,26 @@ export function weekFromRows(rows: HourRow[]): DayState[] {
     d.origIds.push(r.id);
     if (r.is_active) d.active = true;
   }
+  // Filas repetidas, superpuestas o contiguas del mismo dia se muestran como UN rango: el resultado es el
+  // mismo horario. Al guardar, las filas sobrantes (ids que ya no estan en `ranges`) se borran.
+  for (const d of week) if (d.ranges.length > 1) d.ranges = mergeRanges(d.ranges);
   return week;
+}
+
+/** Une rangos que se superponen o se tocan (09:00–12:00 + 12:00–17:00 = 09:00–17:00); conserva el primer id. */
+export function mergeRanges(ranges: HourRange[]): HourRange[] {
+  const sorted = [...ranges].sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+  const out: HourRange[] = [];
+  for (const r of sorted) {
+    const last = out[out.length - 1];
+    if (last && r.start <= last.end) {
+      if (r.end > last.end) last.end = r.end;
+      if (!last.id && r.id) last.id = r.id;
+    } else {
+      out.push({ ...r });
+    }
+  }
+  return out;
 }
 
 /** Why a day cannot be saved, or null when its ranges are valid (ordered, no overlaps). */
