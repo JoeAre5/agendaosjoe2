@@ -176,9 +176,9 @@ BEGIN
       _payload := public.outbound_appointment_payload(NEW);
       IF NEW.status = 'cancelled' AND OLD.status IS DISTINCT FROM 'cancelled' THEN
         PERFORM public.emit_outbound_event('booking.cancelled', 'appointment', NEW.id, NEW.shop_id, _payload);
-      ELSIF NEW.status = 'no_show' AND OLD.status IS DISTINCT FROM 'no_show' THEN
+      ELSIF NEW.status IN ('no_show', 'no-show') AND OLD.status NOT IN ('no_show', 'no-show') THEN
         PERFORM public.emit_outbound_event('booking.no_show', 'appointment', NEW.id, NEW.shop_id, _payload);
-      ELSIF NEW.status NOT IN ('cancelled', 'no_show') THEN
+      ELSIF NEW.status NOT IN ('cancelled', 'no_show', 'no-show') THEN
         IF NEW.starts_at IS DISTINCT FROM OLD.starts_at OR NEW.barber_id IS DISTINCT FROM OLD.barber_id THEN
           PERFORM public.emit_outbound_event('booking.rescheduled', 'appointment', NEW.id, NEW.shop_id,
             _payload || jsonb_build_object('previous', jsonb_build_object(

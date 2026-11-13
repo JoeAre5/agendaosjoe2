@@ -50,7 +50,7 @@ COMMENT ON COLUMN public.appointments.addon_ref_ids IS
 -- 3. Indices de agenda: la disponibilidad lee "citas activas de estos barberos entre dos fechas"
 CREATE INDEX IF NOT EXISTS idx_appointments_barber_starts
   ON public.appointments (barber_id, starts_at)
-  WHERE status NOT IN ('cancelled', 'no_show');
+  WHERE status NOT IN ('cancelled', 'no_show', 'no-show');
 
 CREATE INDEX IF NOT EXISTS idx_block_times_barber_starts
   ON public.block_times (barber_id, starts_at);

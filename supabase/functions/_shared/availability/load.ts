@@ -238,7 +238,7 @@ export async function loadAvailabilityInput(admin: Client, opts: LoadOptions): P
         .select("id,barber_id,starts_at,ends_at")
         .eq("shop_id", shopId)
         .in("barber_id", barberIds)
-        .not("status", "in", "(cancelled,no_show)")
+        .not("status", "in", "(cancelled,no_show,no-show)")
         // Igual que get_busy_intervals (migracion 0016): las citas con overlap_exempt no bloquean.
         .eq("overlap_exempt", false)
         .gte("starts_at", scanStart)

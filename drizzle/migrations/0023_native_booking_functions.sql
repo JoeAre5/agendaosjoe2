@@ -134,7 +134,7 @@ BEGIN
 
   IF EXISTS (
     SELECT 1 FROM public.appointments a
-    WHERE a.barber_id = _barber_id AND a.status NOT IN ('cancelled', 'no_show') AND a.overlap_exempt = false
+    WHERE a.barber_id = _barber_id AND a.status NOT IN ('cancelled', 'no_show', 'no-show') AND a.overlap_exempt = false
       AND a.starts_at < v_ends_at AND a.ends_at > _starts_at
       AND NOT (coalesce(_allow_overlap, false) AND coalesce(_as_staff, false))
   ) THEN
@@ -165,6 +165,9 @@ BEGIN
   IF v_first IS NULL THEN
     RAISE EXCEPTION 'client_name_required';
   END IF;
+
+  -- guard_overlap_exempt (produccion) exige esta marca para fijar overlap_exempt; solo se llega aqui con staff autorizado.
+  IF coalesce(_allow_overlap, false) AND coalesce(_as_staff, false) THEN PERFORM set_config('app.overlap_override', 'on', true); END IF;
 
   INSERT INTO public.appointments (
     shop_id, acuity_id, barber_id, client_id, client_name, client_email, client_phone,
@@ -260,7 +263,7 @@ BEGIN
 
   -- Se vuelve a leer ya con el candado: el estado pudo cambiar mientras esperaba.
   SELECT * INTO v_appt FROM public.appointments WHERE id = _appointment_id FOR UPDATE;
-  IF v_appt.status IN ('cancelled', 'no_show') THEN
+  IF v_appt.status IN ('cancelled', 'no_show', 'no-show') THEN
     RAISE EXCEPTION 'appointment_not_active';
   END IF;
 
@@ -275,7 +278,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM public.appointments a
     WHERE a.barber_id = v_barber AND a.id <> _appointment_id
-      AND a.status NOT IN ('cancelled', 'no_show') AND a.overlap_exempt = false
+      AND a.status NOT IN ('cancelled', 'no_show', 'no-show') AND a.overlap_exempt = false
       AND a.starts_at < v_ends_at AND a.ends_at > _starts_at
       AND NOT coalesce(_allow_overlap, false)
   ) THEN
@@ -289,6 +292,9 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'slot_held';
   END IF;
+
+  -- guard_overlap_exempt (produccion) exige esta marca para fijar overlap_exempt; solo se llega aqui con staff autorizado.
+  IF coalesce(_allow_overlap, false) THEN PERFORM set_config('app.overlap_override', 'on', true); END IF;
 
   UPDATE public.appointments
      SET starts_at = _starts_at, ends_at = v_ends_at, barber_id = v_barber,

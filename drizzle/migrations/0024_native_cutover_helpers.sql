@@ -30,7 +30,7 @@ BEGIN
      WHERE a.shop_id = _shop_id
        AND a.service_ref_id IS NULL
        AND a.service_id IS NOT NULL AND a.service_id > 0
-       AND a.status NOT IN ('cancelled', 'no_show')
+       AND a.status NOT IN ('cancelled', 'no_show', 'no-show')
        AND a.starts_at >= now() - interval '1 day'
        AND s.shop_id = _shop_id
        AND s.acuity_type_id = a.service_id
@@ -57,9 +57,9 @@ BEGIN
      AND NOT EXISTS (SELECT 1 FROM public.working_hours w WHERE w.barber_id = b.id AND w.is_active);
   SELECT count(*) INTO v_services FROM public.services s WHERE s.shop_id = _shop_id AND s.is_active AND s.is_public;
   SELECT count(*) INTO v_future FROM public.appointments a
-   WHERE a.shop_id = _shop_id AND a.status NOT IN ('cancelled', 'no_show') AND a.starts_at >= now();
+   WHERE a.shop_id = _shop_id AND a.status NOT IN ('cancelled', 'no_show', 'no-show') AND a.starts_at >= now();
   SELECT count(*) INTO v_future_no_ref FROM public.appointments a
-   WHERE a.shop_id = _shop_id AND a.status NOT IN ('cancelled', 'no_show') AND a.starts_at >= now()
+   WHERE a.shop_id = _shop_id AND a.status NOT IN ('cancelled', 'no_show', 'no-show') AND a.starts_at >= now()
      AND a.service_ref_id IS NULL
      AND NOT EXISTS (SELECT 1 FROM public.services s
                       WHERE s.shop_id = _shop_id AND s.acuity_type_id = a.service_id AND a.service_id > 0
@@ -121,7 +121,7 @@ BEGIN
   END IF;
   -- Las citas creadas de forma nativa (sin acuity_id) no existen en Acuity: se informa cuantas.
   SELECT count(*) INTO v_native_only FROM public.appointments a
-   WHERE a.shop_id = _shop_id AND a.acuity_id IS NULL AND a.status NOT IN ('cancelled', 'no_show') AND a.starts_at >= now();
+   WHERE a.shop_id = _shop_id AND a.acuity_id IS NULL AND a.status NOT IN ('cancelled', 'no_show', 'no-show') AND a.starts_at >= now();
 
   UPDATE public.shops SET booking_provider = 'acuity', updated_at = now() WHERE id = _shop_id;
 
