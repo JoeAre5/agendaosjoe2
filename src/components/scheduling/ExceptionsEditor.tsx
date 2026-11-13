@@ -150,7 +150,7 @@ export function ExceptionsEditor({
   };
 
   if (scopes.length === 0) return null;
-  const input = "rounded-md border px-2 py-1 text-sm";
+  const input = "rounded-lg border px-3 h-11 text-sm box-border";
   const inputStyle = { background: "transparent", color: "var(--text-primary)", borderColor: "var(--border-color, #444)" } as const;
 
   return (
@@ -165,7 +165,7 @@ export function ExceptionsEditor({
           </button>
         )}
       </div>
-      <p className="text-xs mb-2" style={{ color: "var(--text-secondary)" }}>
+      <p className="text-xs mb-3" style={{ color: "var(--text-secondary)" }}>
         {t(
           language,
           "Cierra un día concreto (feriado, día libre) o cámbiale el horario solo a esa fecha. No afecta el horario semanal ni cancela citas que ya existen.",
@@ -174,15 +174,15 @@ export function ExceptionsEditor({
       </p>
 
       {open && (
-        <div className="rounded-xl card-elevated p-3 mb-3 space-y-3">
-          <div className="flex gap-2">
-            <label className="flex-1 text-xs">
+        <div className="rounded-xl card-elevated p-4 mb-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block min-w-0 text-xs">
               <span style={{ color: "var(--text-secondary)" }}>{t(language, "Fecha", "Date")}</span>
-              <input type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} className={`${input} w-full mt-1`} style={inputStyle} />
+              <input type="date" min={today} value={date} onChange={(e) => setDate(e.target.value)} className={`${input} w-full mt-1.5`} style={inputStyle} />
             </label>
-            <label className="flex-1 text-xs">
+            <label className="block min-w-0 text-xs">
               <span style={{ color: "var(--text-secondary)" }}>{t(language, "Aplica a", "Applies to")}</span>
-              <select value={scope} onChange={(e) => setScope(e.target.value)} className={`${input} w-full mt-1`} style={inputStyle}>
+              <select value={scope} onChange={(e) => setScope(e.target.value)} className={`${input} w-full mt-1.5`} style={inputStyle}>
                 {scopes.map((s) => (
                   <option key={s.id} value={s.id} style={{ color: "#000" }}>
                     {s.label}
@@ -192,12 +192,12 @@ export function ExceptionsEditor({
             </label>
           </div>
 
-          <div className="flex gap-2 text-xs">
+          <div className="grid grid-cols-2 gap-3 text-xs">
             {[true, false].map((isClosed) => (
               <button
                 key={String(isClosed)}
                 onClick={() => setClosed(isClosed)}
-                className="flex-1 rounded-lg px-3 py-2 font-semibold"
+                className="rounded-lg px-3 h-11 font-semibold"
                 style={{
                   background: closed === isClosed ? "var(--accent-color)" : "var(--bg-elevated, rgba(127,127,127,0.15))",
                   color: closed === isClosed ? "#fff" : "var(--text-secondary)",
@@ -209,7 +209,7 @@ export function ExceptionsEditor({
           </div>
 
           {!closed && (
-            <div className="space-y-1">
+            <div className="space-y-2">
               {ranges.map((r, idx) => (
                 <div key={idx} className="flex items-center gap-2">
                   <input type="time" value={r.start} onChange={(e) => setRanges(ranges.map((x, i) => (i === idx ? { ...x, start: e.target.value } : x)))} className={`${input} flex-1 min-w-0`} style={inputStyle} />
@@ -238,11 +238,11 @@ export function ExceptionsEditor({
             maxLength={120}
           />
 
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setOpen(false)} disabled={saving}>
+          <div className="grid grid-cols-2 gap-3">
+            <Button variant="outline" className="h-11" onClick={() => setOpen(false)} disabled={saving}>
               {t(language, "Cancelar", "Cancel")}
             </Button>
-            <Button className="flex-1" onClick={save} disabled={saving}>
+            <Button className="h-11" onClick={save} disabled={saving}>
               {saving ? <Loader2 size={16} className="animate-spin" /> : t(language, "Guardar excepción", "Save exception")}
             </Button>
           </div>
