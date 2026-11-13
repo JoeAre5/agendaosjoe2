@@ -22,9 +22,36 @@ if (!colsFile || !funcsFile) {
 // Acepta la salida de la CLI ({ ..., "rows": [...] }) y tambien un arreglo JSON exportado desde el
 // editor SQL de Supabase ("Copy as JSON" / descarga JSON): [ { "t": "...", "c": "..." }, ... ].
 function readRows(file) {
-  const raw = fs.readFileSync(file, "utf8");
+  const raw = fs.readFileSync(file, "utf8").replace(/^﻿/, "");
+  if (/\.csv$/i.test(file)) return parseCsv(raw);
   const json = JSON.parse(raw.slice(raw.search(/[[{]/)));
   return Array.isArray(json) ? json : (json.rows ?? json);
+}
+
+// CSV del boton "Export CSV" del editor SQL: primera fila = nombres de columna (t,c o p).
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ",") { row.push(cell); cell = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); cell = "";
+      if (row.some((c) => c !== "")) rows.push(row);
+      row = [];
+    } else cell += ch;
+  }
+  if (cell !== "" || row.length) { row.push(cell); if (row.some((c) => c !== "")) rows.push(row); }
+  const [head, ...body] = rows;
+  return body.map((r) => Object.fromEntries(head.map((h, i) => [h.trim(), (r[i] ?? "").trim()])));
 }
 
 const types = fs.readFileSync(typesFile, "utf8");
