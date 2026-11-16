@@ -72,6 +72,46 @@ function BarberSelect({
   );
 }
 
+/** Fila de interruptor: todos los interruptores de la hoja usan esta misma pieza (mismo espacio, alineación y tamaño). */
+function SwitchRow({
+  title,
+  hint,
+  checked,
+  onChange,
+}: {
+  title: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{title}</p>
+        {hint ? (
+          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+            {hint}
+          </p>
+        ) : null}
+      </div>
+      <Switch className="shrink-0" checked={checked} onCheckedChange={onChange} aria-label={title} />
+    </div>
+  );
+}
+
+// Safari de iPhone ignora el ancho de los campos de hora nativos (texto centrado y borde fuera de la tarjeta)
+// salvo que se les quite el estilo nativo; el selector de hora del sistema se abre igual al tocarlos.
+const pickerClass =
+  "block h-9 w-full min-w-0 max-w-full rounded-md border px-2 text-sm box-border [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:p-0";
+const pickerStyle = {
+  background: "transparent",
+  color: "var(--text-primary)",
+  borderColor: "var(--border-color, #444)",
+  WebkitAppearance: "none",
+  appearance: "none",
+  textAlign: "left",
+} as const;
+
 const num = (v: string, fallback = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
@@ -237,41 +277,44 @@ export function ServiceEditorSheet({
             <Label>{t(language, "Barbero", "Barber")}</Label>
             <BarberSelect language={language} barbers={barbers} value={barberId} onChange={setBarberId} />
           </div>
-          <div className="flex items-center justify-between rounded-lg px-3 py-2 card-elevated">
-            <div>
-              <p className="text-sm font-medium">{t(language, "Visible para clientes", "Visible to clients")}</p>
-              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                {t(language, "Los servicios privados solo los agenda el personal.", "Private services can only be booked by staff.")}
-              </p>
-            </div>
-            <Switch checked={isPublic} onCheckedChange={setIsPublic} />
+          <div className="rounded-lg px-3 py-2 card-elevated">
+            <SwitchRow
+              title={t(language, "Visible para clientes", "Visible to clients")}
+              hint={t(language, "Los servicios privados solo los agenda el personal.", "Private services can only be booked by staff.")}
+              checked={isPublic}
+              onChange={setIsPublic}
+            />
           </div>
           <div className="rounded-lg px-3 py-2 card-elevated space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">{t(language, "Horario propio del servicio", "Own hours for this service")}</p>
+            <SwitchRow
+              title={t(language, "Horario propio del servicio", "Own hours for this service")}
+              hint={t(
+                language,
+                "Se ofrece solo en estas horas, en lugar del horario normal.",
+                "Offered only in these hours, instead of the normal hours.",
+              )}
+              checked={ownHours}
+              onChange={setOwnHours}
+            />
+            {ownHours && (
+              <>
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+                  <div className="min-w-0 space-y-1.5">
+                    <Label className="text-xs">{t(language, "Desde", "From")}</Label>
+                    <input type="time" value={ownStart} onChange={(e) => setOwnStart(e.target.value)} className={pickerClass} style={pickerStyle} />
+                  </div>
+                  <div className="min-w-0 space-y-1.5">
+                    <Label className="text-xs">{t(language, "Hasta", "To")}</Label>
+                    <input type="time" value={ownEnd} onChange={(e) => setOwnEnd(e.target.value)} className={pickerClass} style={pickerStyle} />
+                  </div>
+                </div>
                 <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
                   {t(
                     language,
-                    "Si lo activas, este servicio se ofrece solo en estas horas (reemplaza el horario normal del barbero y de la tienda). Los cierres por fecha siguen aplicando.",
-                    "When on, this service is offered only in these hours (replaces the barber and shop normal hours). Date closures still apply.",
+                    "Los días sin marcar quedan cerrados para este servicio. Los cierres por fecha siguen aplicando.",
+                    "Unmarked days are closed for this service. Date closures still apply.",
                   )}
                 </p>
-              </div>
-              <Switch checked={ownHours} onCheckedChange={setOwnHours} />
-            </div>
-            {ownHours && (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>{t(language, "Desde", "From")}</Label>
-                    <Input type="time" value={ownStart} onChange={(e) => setOwnStart(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>{t(language, "Hasta", "To")}</Label>
-                    <Input type="time" value={ownEnd} onChange={(e) => setOwnEnd(e.target.value)} />
-                  </div>
-                </div>
                 <div className="flex flex-wrap gap-2">
                   {(language === "es" ? DAYS_ES : DAYS_EN).map((label, d) => {
                     const on = ownDays.includes(d);
@@ -280,12 +323,10 @@ export function ServiceEditorSheet({
                         key={d}
                         type="button"
                         onClick={() => setOwnDays((cur) => (on ? cur.filter((x) => x !== d) : [...cur, d]))}
-                        className="h-9 min-w-[3rem] rounded-md border px-3 text-sm"
-                        style={{
-                          background: on ? "var(--accent, #2563eb)" : "transparent",
-                          color: on ? "#fff" : "var(--text-primary)",
-                          borderColor: "var(--border-color, #444)",
-                        }}
+                        className={`h-9 min-w-[3rem] rounded-md border px-3 text-sm ${
+                          on ? "bg-primary text-primary-foreground border-primary font-semibold" : "bg-transparent"
+                        }`}
+                        style={on ? undefined : { color: "var(--text-primary)", borderColor: "var(--border-color, #444)" }}
                         aria-pressed={on}
                       >
                         {label}
