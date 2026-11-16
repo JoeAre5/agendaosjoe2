@@ -167,7 +167,7 @@ export async function loadAvailabilityInput(admin: Client, opts: LoadOptions): P
   // ── catalogue: one batch (service, add-ons, barbers, rules, shop hours) ──
   let barberQuery = admin.from("barbers").select(BARBER_COLS).eq("shop_id", shopId).eq("is_active", true);
   if (opts.barberId) barberQuery = barberQuery.eq("id", opts.barberId);
-  const [svcRes, addRes, barberRes, rulesRes, hoursRes] = await Promise.all([
+  const [svcRes, addRes, barberRes, rulesRes, hoursRes, svcHoursRes] = await Promise.all([
     admin.from("services").select(SERVICE_COLS).eq("shop_id", shopId).eq("id", opts.serviceId).maybeSingle(),
     addonIds.length > 0
       ? admin.from("service_addons").select(ADDON_COLS).eq("shop_id", shopId).in("id", addonIds)
@@ -175,7 +175,10 @@ export async function loadAvailabilityInput(admin: Client, opts: LoadOptions): P
     barberQuery,
     admin.from("booking_rules").select("*").eq("shop_id", shopId).eq("is_active", true),
     admin.from("shop_hours").select("day_of_week,start_time,end_time,is_active").eq("shop_id", shopId).eq("is_active", true),
+    admin.from("service_hours").select("day_of_week,start_time,end_time,is_active").eq("shop_id", shopId).eq("service_id", opts.serviceId).eq("is_active", true),
   ]);
+  // 42P01 = tabla inexistente: si la funcion se despliega antes de la migracion 0029, no se rompe la disponibilidad.
+  if (svcHoursRes.error && (svcHoursRes.error as { code?: string }).code !== "42P01") fail(svcHoursRes.error, "service_hours_read_failed");
   if (svcRes.error) fail(svcRes.error, "service_read_failed");
   if (addRes.error) fail(addRes.error, "addon_read_failed");
   if (barberRes.error) fail(barberRes.error, "barber_read_failed");
@@ -210,6 +213,7 @@ export async function loadAvailabilityInput(admin: Client, opts: LoadOptions): P
       durationMinutes: service.duration_minutes,
       paddingBeforeMinutes: service.padding_before_minutes,
       paddingAfterMinutes: service.padding_after_minutes,
+      hours: weekly((svcHoursRes.error ? [] : svcHoursRes.data) ?? []),
     },
     addons: addons.map((a) => ({ durationMinutes: a.duration_minutes })),
     rules,

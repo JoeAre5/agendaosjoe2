@@ -4965,6 +4965,42 @@ export type Database = {
         }
         Relationships: []
       }
+      service_hours: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          end_time: string
+          id: string
+          is_active: boolean
+          service_id: string
+          shop_id: string
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          end_time: string
+          id?: string
+          is_active?: boolean
+          service_id: string
+          shop_id?: string
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          service_id?: string
+          shop_id?: string
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       shop_hours: {
         Row: {
           created_at: string

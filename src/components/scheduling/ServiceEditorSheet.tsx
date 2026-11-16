@@ -42,6 +42,8 @@ export interface EditableAddon {
 }
 
 type Lang = "es" | "en";
+const DAYS_ES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const DAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const t = (language: Lang, es: string, en: string) => (language === "es" ? es : en);
 
 function BarberSelect({
@@ -102,9 +104,32 @@ export function ServiceEditorSheet({
   const [barberId, setBarberId] = useState<string | null>(null);
   const [isPublic, setIsPublic] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Horario propio: una ventana (inicio-fin) en los dias marcados. Sin activarlo, vale el horario normal.
+  const [ownHours, setOwnHours] = useState(false);
+  const [ownStart, setOwnStart] = useState("07:00");
+  const [ownEnd, setOwnEnd] = useState("19:00");
+  const [ownDays, setOwnDays] = useState<number[]>([1, 2, 3, 4, 5, 6]);
 
   useEffect(() => {
     if (!open) return;
+    setOwnHours(false);
+    setOwnStart("07:00");
+    setOwnEnd("19:00");
+    setOwnDays([1, 2, 3, 4, 5, 6]);
+    if (service?.id) {
+      void supabase
+        .from("service_hours")
+        .select("day_of_week,start_time,end_time")
+        .eq("service_id", service.id)
+        .eq("is_active", true)
+        .then(({ data }) => {
+          if (!data || data.length === 0) return;
+          setOwnHours(true);
+          setOwnStart(String(data[0].start_time).slice(0, 5));
+          setOwnEnd(String(data[0].end_time).slice(0, 5));
+          setOwnDays(data.map((r) => r.day_of_week));
+        });
+    }
     setName(service?.name ?? "");
     setCategory(service?.category ?? "");
     setDescription(service?.description ?? "");
@@ -123,6 +148,10 @@ export function ServiceEditorSheet({
       toast.error(t(language, "Nombre, duración y precio son obligatorios", "Name, duration and price are required"));
       return;
     }
+    if (ownHours && (ownDays.length === 0 || ownEnd <= ownStart)) {
+      toast.error(t(language, "Horario propio: elige dias y una hora de fin posterior al inicio", "Own hours: pick days and an end time after the start"));
+      return;
+    }
     setSaving(true);
     const row = {
       name: name.trim(),
@@ -137,12 +166,27 @@ export function ServiceEditorSheet({
       is_active: true,
       locally_edited: true,
     };
-    const { error } = service?.id
-      ? await supabase.from("services").update(row).eq("id", service.id)
-      : await supabase.from("services").insert(row);
+    const { data: saved, error } = service?.id
+      ? await supabase.from("services").update(row).eq("id", service.id).select("id").single()
+      : await supabase.from("services").insert(row).select("id").single();
+    if (error || !saved) {
+      setSaving(false);
+      toast.error(t(language, "No se pudo guardar el servicio", "Could not save the service") + `: ${error?.message ?? ""}`);
+      return;
+    }
+    // Horario propio: se reemplazan las filas del servicio por las marcadas (o ninguna).
+    const del = await supabase.from("service_hours").delete().eq("service_id", saved.id);
+    let hoursError = del.error;
+    if (!hoursError && ownHours) {
+      const ins = await supabase.from("service_hours").insert(
+        ownDays.map((d) => ({ service_id: saved.id, day_of_week: d, start_time: ownStart, end_time: ownEnd, is_active: true })),
+      );
+      hoursError = ins.error;
+    }
     setSaving(false);
-    if (error) {
-      toast.error(t(language, "No se pudo guardar el servicio", "Could not save the service") + `: ${error.message}`);
+    if (hoursError) {
+      toast.error(t(language, "El servicio se guardo, pero no su horario propio", "Service saved, but not its own hours") + `: ${hoursError.message}`);
+      onSaved();
       return;
     }
     toast.success(service?.id ? t(language, "Servicio actualizado", "Service updated") : t(language, "Servicio creado", "Service created"));
@@ -201,6 +245,56 @@ export function ServiceEditorSheet({
               </p>
             </div>
             <Switch checked={isPublic} onCheckedChange={setIsPublic} />
+          </div>
+          <div className="rounded-lg px-3 py-2 card-elevated space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">{t(language, "Horario propio del servicio", "Own hours for this service")}</p>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                  {t(
+                    language,
+                    "Si lo activas, este servicio se ofrece solo en estas horas (reemplaza el horario normal del barbero y de la tienda). Los cierres por fecha siguen aplicando.",
+                    "When on, this service is offered only in these hours (replaces the barber and shop normal hours). Date closures still apply.",
+                  )}
+                </p>
+              </div>
+              <Switch checked={ownHours} onCheckedChange={setOwnHours} />
+            </div>
+            {ownHours && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>{t(language, "Desde", "From")}</Label>
+                    <Input type="time" value={ownStart} onChange={(e) => setOwnStart(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t(language, "Hasta", "To")}</Label>
+                    <Input type="time" value={ownEnd} onChange={(e) => setOwnEnd(e.target.value)} />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(language === "es" ? DAYS_ES : DAYS_EN).map((label, d) => {
+                    const on = ownDays.includes(d);
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setOwnDays((cur) => (on ? cur.filter((x) => x !== d) : [...cur, d]))}
+                        className="h-9 min-w-[3rem] rounded-md border px-3 text-sm"
+                        style={{
+                          background: on ? "var(--accent, #2563eb)" : "transparent",
+                          color: on ? "#fff" : "var(--text-primary)",
+                          borderColor: "var(--border-color, #444)",
+                        }}
+                        aria-pressed={on}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
           <Button className="w-full" onClick={save} disabled={saving}>
             {saving ? <Loader2 size={16} className="animate-spin" /> : t(language, "Guardar", "Save")}

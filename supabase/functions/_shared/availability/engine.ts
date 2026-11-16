@@ -268,7 +268,8 @@ function barberDay(ctx: Ctx, input: AvailabilityInput, barber: BarberInput, day:
   const override = exceptionWindows(input, barber.id, day);
   const shop = input.shopHours.length > 0 ? weeklyRanges(input.shopHours, day) : [dayRange];
   const work = weeklyRanges(barber.workingHours, day);
-  const windows = override ?? intersect(shop, work);
+  const own = input.service.hours?.some((h) => h.isActive !== false) ? weeklyRanges(input.service.hours, day) : null;
+  const windows = override ?? own ?? intersect(shop, work);
 
   // Padding may reach into the neighbouring day, so look slightly outside it.
   const around: Range = { s: dayRange.s - ctx.padBeforeMs, e: dayRange.e + ctx.padAfterMs };

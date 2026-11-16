@@ -62,6 +62,11 @@ export interface ServiceInput {
   durationMinutes: number;
   paddingBeforeMinutes?: number;
   paddingAfterMinutes?: number;
+  /**
+   * Horario propio del servicio. Si tiene al menos un intervalo activo, REEMPLAZA el horario semanal
+   * de la tienda y del barbero (las excepciones por fecha siguen ganando). Vacio = horario normal.
+   */
+  hours?: WeeklyInterval[];
 }
 
 export interface AvailabilityInput {

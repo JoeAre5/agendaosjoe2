@@ -373,3 +373,51 @@ Deno.test("checkSlot rechaza un horario en un dia cerrado por excepcion", () => 
   const res = checkSlot(input({ exceptions: [{ barberId: "b1", date: TUE, closed: true }] }), "b1", "2026-09-08T10:00:00-04:00");
   assertEquals(res.ok, false);
 });
+
+// ── Horario propio por servicio (0029) ────────────────────────────────────────
+
+Deno.test("service hours replace shop and barber hours (07:00-19:00 widens 09-17)", () => {
+  const r = computeAvailability(input({ service: { durationMinutes: 60, hours: hours([2], "07:00", "19:00") } }));
+  const s = starts(r);
+  assertEquals(s[0], "07:00");
+  assertEquals(s[s.length - 1], "18:00"); // 60 min, ends 19:00
+});
+
+Deno.test("service hours apply even on a day the barber does not work", () => {
+  // Domingo 2026-09-06 (dow 0): el barbero no trabaja ese dia, el servicio si.
+  const r = computeAvailability(input({
+    from: "2026-09-06", to: "2026-09-06", now: "2026-09-05T08:00:00-04:00",
+    service: { durationMinutes: 60, hours: hours([0], "07:00", "12:00") },
+  }));
+  assertEquals(starts(r, "2026-09-06")[0], "07:00");
+  assertEquals(computeAvailability(input({ from: "2026-09-06", to: "2026-09-06", now: "2026-09-05T08:00:00-04:00" })).days, []);
+});
+
+Deno.test("service hours: a closed exception still wins", () => {
+  const r = computeAvailability(input({
+    service: { durationMinutes: 60, hours: hours([2], "07:00", "19:00") },
+    exceptions: [{ barberId: "b1", date: TUE, closed: true }],
+  }));
+  assertEquals(r.days, []);
+});
+
+Deno.test("service hours: appointments still block", () => {
+  const r = computeAvailability(input({
+    service: { durationMinutes: 60, hours: hours([2], "07:00", "19:00") },
+    barbers: [barber({ appointments: [{ start: "2026-09-08T07:00:00-04:00", end: "2026-09-08T08:00:00-04:00" }] })],
+  }));
+  assertEquals(starts(r)[0], "08:00");
+});
+
+Deno.test("service hours: inactive rows are ignored (normal hours apply)", () => {
+  const off = hours([2], "07:00", "19:00").map((h) => ({ ...h, isActive: false }));
+  const r = computeAvailability(input({ service: { durationMinutes: 30, hours: off } }));
+  assertEquals(starts(r)[0], "09:00");
+});
+
+Deno.test("checkSlot respects service hours (07:00 accepted, 06:30 rejected)", () => {
+  const i = input({ service: { durationMinutes: 60, hours: hours([2], "07:00", "19:00") } });
+  assertEquals(checkSlot(i, "b1", "2026-09-08T07:00:00-04:00").ok, true);
+  const bad = checkSlot(i, "b1", "2026-09-08T06:30:00-04:00");
+  assertEquals(bad.ok, false);
+});
