@@ -778,6 +778,8 @@ Deno.serve(async (req) => {
           "fast-path",
           paymentMethod as "stripe" | "paypal",
           stripePmType,
+          // Esta ruta manda su propio correo de confirmacion mas abajo: commitDraft no debe mandar otro.
+          { skipConfirmationEmail: true },
         );
       } catch (e) {
         const msg = (e as Error).message || "Commit failed";

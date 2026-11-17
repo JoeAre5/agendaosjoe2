@@ -16,6 +16,13 @@ import { contactEmail } from "./contactEmail.ts";
 import { createAcuityAddonResolver } from "./acuityAddons.ts";
 import { BookingRejectedError, nativeRpcError } from "./nativeBooking.ts";
 import { nativeShopFor } from "./nativeDraft.ts";
+import { recordServiceTransactionOnce } from "./recordServiceTransaction.ts";
+import { sendPaidBookingConfirmation } from "./paidBookingEmail.ts";
+
+/** Opciones de commitDraft. skipConfirmationEmail: la ruta que llama ya manda su propio correo (pay-then-book commit-and-book). */
+export interface CommitDraftOptions {
+  skipConfirmationEmail?: boolean;
+}
 
 export interface CommitResult {
   success: true;
@@ -106,6 +113,7 @@ export async function commitDraft(
   source: string,
   paymentMethod: "ath_movil" | "stripe" | "paypal" | "benefit" = "ath_movil",
   stripePmType: string | null = null,
+  opts: CommitDraftOptions = {},
 ): Promise<CommitResult> {
   console.log(`[commitDraft] ▶ START draftId=${draftId} ref=${paymentRef} src=${source} method=${paymentMethod} stripePmType=${stripePmType ?? "n/a"}`);
 
@@ -500,7 +508,9 @@ export async function commitDraft(
   const serviceSubtotalCents = serviceTotalCents - tipCents;
 
   console.log(`[commitDraft] Inserting service transaction (svc=${serviceTotalCents}c, products=${productsTotalCents}c)`);
-  const { error: txErr } = await admin.from("transactions").insert({
+  // Una sola vez por pago: dos llamadas casi simultaneas (pantalla de confirmacion + webhook) reutilizan la
+  // misma cita y antes insertaban la transaccion dos veces. Ver recordServiceTransaction.ts y la migracion 0030.
+  await recordServiceTransactionOnce(admin, {
     barber_id: draft.barber_id,
     client_id: clientIdFinal,
     appointment_id: upserted.id,
@@ -516,9 +526,6 @@ export async function commitDraft(
     source: draft.source === "client_app" ? "client_app" : "public_booking",
     notes: `${draft.source} booking — ${source}`,
   });
-  if (txErr) {
-    console.warn(`[commitDraft] Service transaction insert warning (may be benign duplicate): ${txErr.message}`);
-  }
 
   // ─── 6b. Mini-shop: insert one transaction per product line + decrement stock ───
   // RULES:
@@ -584,7 +591,9 @@ export async function commitDraft(
 
   // ─── 7. Mark draft committed ───
   console.log(`[commitDraft] Marking draft committed`);
-  await admin
+  // Solo la llamada que cierra el borrador (pending -> committed) manda el correo: una segunda llamada
+  // concurrente para el mismo pago no debe mandar otro.
+  const { data: closedRows, error: closeErr } = await admin
     .from("booking_drafts")
     .update({
       status: "committed",
@@ -592,7 +601,24 @@ export async function commitDraft(
       acuity_id: acuityData.id,
       committed_at: new Date().toISOString(),
     })
-    .eq("id", draftId);
+    .eq("id", draftId)
+    .neq("status", "committed")
+    .select("id");
+  const closedByThisCall = !closeErr && (closedRows?.length ?? 0) > 0;
+
+  // ─── 7a. Correo de confirmacion de la reserva pagada (todas las rutas de pago, una sola vez) ───
+  if (closedByThisCall && !opts.skipConfirmationEmail) {
+    await sendPaidBookingConfirmation(admin, {
+      email: draft.email,
+      firstName: draft.first_name,
+      appointmentId: upserted.id,
+      acuityId: (acuityData.id ?? null) as number | null,
+      startsAt,
+      serviceName: String(acuityData.type || "Servicio"),
+      barberName: String((acuityData as { calendar?: string }).calendar || "").trim() || null,
+      amountPaidCents,
+    });
+  }
 
   // ─── 7b. Notify owner devices (fire-and-forget) ───
   // Sends a push to every owner with an active subscription, so admins with
