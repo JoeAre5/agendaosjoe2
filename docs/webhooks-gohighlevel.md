@@ -54,6 +54,16 @@ Los clientes de confianza se marcan con **"Cliente recurrente"** en su ficha (`c
 
 Todos los avisos de cita llevan `data.client.is_recurring_client` (y `data.is_recurring`, de la cita). En los flujos de cancelaciones y reagendaciones, la rama "Recurrente" debe terminar el flujo si **cualquiera de los dos** es verdadero (dos condiciones unidas con **OR**). En el flujo de **recordatorios no hace falta** ninguna rama de recurrentes: el sistema ya omite el de 24 h, y el de 2 h debe llegar a todos.
 
+### Ajustes de alineación con los flujos (migración 0033)
+- **Reagendaciones:** `booking.rescheduled` sale cuando cambia la hora **o** el barbero. Lleva `data.time_changed` y `data.barber_changed` (booleanos). Si el SMS habla de horas ("antes X, ahora Y"), el flujo debe terminar cuando `data.time_changed` es **false** (cambio solo de barbero), o mandar otro texto.
+- **Reagendar reinicia los recordatorios:** al cambiar `starts_at` se borran las marcas de `booking_reminders_sent`, y el de 24 h / 2 h se calcula con la hora nueva.
+- **Recordatorios:** no se emiten si la cita no tiene teléfono (el flujo solo manda SMS) ni si el cliente desactivó los SMS de citas en su perfil (`clients.notify_sms_appointments = false`).
+- **`data.client.notify_sms_appointments`** viaja en todos los avisos de cita, para que cualquier flujo de GHL que mande SMS pueda respetarlo.
+- Pruebas de comportamiento en `supabase/tests/outbound_reminders_*.sql` (cada una termina con una excepción que devuelve el resultado y deshace todo; correrlas solo en un proyecto de prueba).
+
+### Cosas que se deciden en GHL (no en el sistema)
+- **Citas confirmadas** se envían por cada cita que se crea: una **serie** crea una cita por cada fecha y cada una manda su confirmación. Si no se quiere eso, el flujo puede terminar con `data.is_recurring` = true. Lo mismo para las citas de **walk-in** (`data.booking_source` = `walk_in`), que se crean con la persona presente.
+
 Aplicar `0032` **antes** de publicar la pantalla del interruptor. Si la pantalla se publica primero, el interruptor simplemente no aparece (la columna se lee aparte de la lista de clientes), sin romper nada.
 
 Configuración (después de aplicar `0031`): apuntar el destino de recordatorios al evento nuevo y desplegar `outbound-webhook-dispatch` (ejemplos de prueba).
