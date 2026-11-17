@@ -49,7 +49,7 @@ export function endpointMatches(ep: { event_types: string[] | null; shop_id: str
 
 /** Tipos de evento para los que existe un ejemplo completo (outbound_sample_event, migracion 0028). */
 export const SAMPLE_EVENT_TYPES = [
-  "booking.created", "booking.rescheduled", "booking.updated", "booking.cancelled", "booking.no_show", "booking.paid",
+  "booking.created", "booking.rescheduled", "booking.updated", "booking.cancelled", "booking.no_show", "booking.paid", "booking.reminder",
   "service.created", "service.updated", "service.deleted", "addon.created", "addon.updated", "addon.deleted",
 ];
 

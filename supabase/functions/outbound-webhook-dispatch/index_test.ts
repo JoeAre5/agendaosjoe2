@@ -34,7 +34,7 @@ Deno.test("ejemplos completos: un tipo por cada evento que emiten los disparador
   assertEquals(
     [...SAMPLE_EVENT_TYPES].sort(),
     ["addon.created", "addon.deleted", "addon.updated", "booking.cancelled", "booking.created", "booking.no_show",
-     "booking.paid", "booking.rescheduled", "booking.updated", "service.created", "service.deleted", "service.updated"],
+     "booking.paid", "booking.reminder", "booking.rescheduled", "booking.updated", "service.created", "service.deleted", "service.updated"],
   );
 });
 

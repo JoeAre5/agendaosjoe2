@@ -13,6 +13,7 @@ Los disparadores viven en la **base de datos** (`drizzle/migrations/0025_outboun
 | `booking.cancelled` | La cita pasa a cancelada |
 | `booking.no_show` | La cita pasa a no se presentó |
 | `booking.paid` | La cita pasa a pagada |
+| `booking.reminder` | Recordatorio a las **24 horas** y a las **2 horas** antes de una cita activa (migración `0031`; lleva `reminder.kind` = `24h` o `2h` y `reminder.minutes_before`) |
 | `service.created` / `service.updated` / `service.deleted` | Cambios en servicios (`changed` en las ediciones) |
 | `addon.created` / `addon.updated` / `addon.deleted` | Cambios en complementos |
 
@@ -31,6 +32,24 @@ INSERT INTO public.outbound_webhook_endpoints (name, url, event_types, secret) V
 ```
 Se puede usar una sola URL para todo o una por evento. Sin destinos activos no se guarda nada. Para pausar uno: `UPDATE ... SET is_active = false`.
 3. Desplegar la función `outbound-webhook-dispatch` (`verify_jwt = false`, ya está en `config.toml`). **No** desplegar `webhook-echo` en producción: es solo para pruebas.
+
+## Recordatorios (`booking.reminder`, migración 0031)
+**Por qué existe:** los pasos de espera de GHL "hasta la cita" (*Appointment / calendar event*) buscan una cita creada **dentro del calendario de GHL**. Las citas llegan por webhook, GHL no la encuentra, da la fecha por vencida (*If this date has already passed → Continue*) y manda todos los recordatorios de golpe. Con este evento no hace falta esperar nada en GHL: el aviso llega a la hora exacta.
+
+- Una tarea de la base (`booking-reminders-emit`, cada 10 minutos, solo SQL) llama a `emit_booking_reminders()`.
+- Emite **un solo aviso por cita y tipo** (`24h` y `2h`), solo si la cita sigue `scheduled`/`confirmed` en ese momento. Una cita cancelada o reagendada no genera el recordatorio viejo.
+- **No** emite el de 24 h si la cita se reservó dentro de esa ventana (reservar con 5 h de margen no manda el de 24 h), ni el de 2 h si se reservó con menos de 2 h.
+- Margen de 30 minutos: si la tarea se retrasa poco, se envía; si se retrasa más, no se envía tarde.
+- Si en ese momento no hay un destino activo para `booking.reminder`, el recordatorio se marca como visto y **no se acumula**: al activar el destino no sale un aluvión de atrasados.
+- Mismos datos que `booking.created` (incluida la hora local en `starts_local`), más `reminder: { kind, minutes_before }`.
+
+Configuración (después de aplicar `0031`): apuntar el destino de recordatorios al evento nuevo y desplegar `outbound-webhook-dispatch` (ejemplos de prueba).
+```sql
+UPDATE public.outbound_webhook_endpoints SET event_types = '{booking.reminder}', updated_at = now()
+ WHERE name = 'GHL - 5 Recordatorios';
+SELECT public.send_test_webhook('<id-del-destino>', 'booking.reminder');   -- ejemplo (kind = 24h)
+```
+En el flujo de GHL: un disparador de webhook de entrada y una condición sobre `data.reminder.kind` (`24h` → SMS de 24 horas; `2h` → SMS de 2 horas), ignorando `data.test = true`. Sin pasos de espera.
 
 ## Qué recibe el destino
 Un POST JSON con los encabezados `X-Webhook-Event`, `X-Webhook-Id` (id único del evento, sirve para no procesarlo dos veces) y, si el destino tiene `secret`, `X-Webhook-Signature: sha256=<HMAC-SHA256 hex del cuerpo exacto>`.
