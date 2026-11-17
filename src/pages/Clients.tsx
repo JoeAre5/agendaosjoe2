@@ -40,6 +40,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { SubpageHeader } from "@/components/SubpageHeader";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Drawer,
   DrawerContent,
@@ -159,6 +160,9 @@ export default function Clients() {
   const [productHistory, setProductHistory] = useState<ProductHistory[]>([]);
   const [editNotes, setEditNotes] = useState("");
   const [editBarber, setEditBarber] = useState<string | null>(null);
+  // Cliente recurrente (migracion 0032). null = aun no se pudo leer (columna ausente o cargando): no se muestra ni se guarda.
+  const [savedRecurring, setSavedRecurring] = useState<boolean | null>(null);
+  const [editRecurring, setEditRecurring] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [lastPaymentMethod, setLastPaymentMethod] = useState<string | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -451,6 +455,20 @@ export default function Clients() {
     setClientUrlId(client.id);
     setEditNotes(client.notes || "");
     setEditBarber(client.preferred_barber_id);
+    setSavedRecurring(null);
+    setEditRecurring(false);
+    // Se lee aparte de la lista a proposito: si la migracion 0032 aun no esta aplicada, solo falta el interruptor.
+    void supabase
+      .from("clients")
+      .select("is_recurring_client")
+      .eq("id", client.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (request !== profileRequest.current || error || !data) return;
+        const value = !!(data as { is_recurring_client?: boolean }).is_recurring_client;
+        setSavedRecurring(value);
+        setEditRecurring(value);
+      });
     setEditingContact(false);
     setLoadingProfile(true);
     setProfileFailed(false);
@@ -575,6 +593,7 @@ export default function Clients() {
       .update({
         notes: editNotes || null,
         preferred_barber_id: editBarber || null,
+        ...(savedRecurring !== null ? { is_recurring_client: editRecurring } : {}),
       })
       .eq("id", selectedClient.id);
     setSavingProfile(false);
@@ -582,6 +601,7 @@ export default function Clients() {
       toast.error(error.message);
     } else {
       toast.success(language === "es" ? "Guardado" : "Saved");
+      if (savedRecurring !== null) setSavedRecurring(editRecurring);
       setClients((prev) =>
         prev.map((c) =>
           c.id === selectedClient.id
@@ -1521,6 +1541,25 @@ export default function Clients() {
                   </div>
                 </div>
 
+                {savedRecurring !== null && (
+                  <div className="rounded-xl card-elevated p-4 flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{language === "es" ? "Cliente recurrente" : "Recurring client"}</p>
+                      <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                        {language === "es"
+                          ? "Solo recibe el recordatorio de 2 horas. No recibe el de 24 horas ni avisos de cancelación o cambio de hora."
+                          : "Only gets the 2-hour reminder. No 24-hour reminder, cancellation or reschedule notices."}
+                      </p>
+                    </div>
+                    <Switch
+                      className="shrink-0"
+                      checked={editRecurring}
+                      onCheckedChange={setEditRecurring}
+                      aria-label={language === "es" ? "Cliente recurrente" : "Recurring client"}
+                    />
+                  </div>
+                )}
+
                 <div className="rounded-xl card-elevated p-4">
                   <label className="text-xs font-medium mb-2 block" style={{ color: "var(--text-secondary)" }}>
                     {language === "es" ? "Notas" : "Notes"}
@@ -1535,7 +1574,8 @@ export default function Clients() {
                 </div>
 
                 {(editNotes !== (selectedClient.notes || "") ||
-                  editBarber !== selectedClient.preferred_barber_id) && (
+                  editBarber !== selectedClient.preferred_barber_id ||
+                  (savedRecurring !== null && editRecurring !== savedRecurring)) && (
                   <button
                     onClick={saveProfile}
                     disabled={savingProfile}

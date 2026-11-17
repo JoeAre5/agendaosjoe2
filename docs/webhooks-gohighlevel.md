@@ -43,6 +43,19 @@ Se puede usar una sola URL para todo o una por evento. Sin destinos activos no s
 - Si en ese momento no hay un destino activo para `booking.reminder`, el recordatorio se marca como visto y **no se acumula**: al activar el destino no sale un aluvión de atrasados.
 - Mismos datos que `booking.created` (incluida la hora local en `starts_local`), más `reminder: { kind, minutes_before }`.
 
+### Clientes recurrentes (migración 0032)
+Los clientes de confianza se marcan con **"Cliente recurrente"** en su ficha (`clients.is_recurring_client`). Regla:
+
+| Aviso | Cliente recurrente |
+|---|---|
+| Recordatorio de 24 h | **No se emite** (ni para citas de serie, `is_recurring`) |
+| Recordatorio de 2 h | **Sí se emite** |
+| Cancelación y reagendación | Siguen emitiéndose: el flujo de GHL termina sin SMS con una rama "Recurrente" |
+
+Todos los avisos de cita llevan `data.client.is_recurring_client` (y `data.is_recurring`, de la cita). En los flujos de cancelaciones y reagendaciones, la rama "Recurrente" debe terminar el flujo si **cualquiera de los dos** es verdadero (dos condiciones unidas con **OR**). En el flujo de **recordatorios no hace falta** ninguna rama de recurrentes: el sistema ya omite el de 24 h, y el de 2 h debe llegar a todos.
+
+Aplicar `0032` **antes** de publicar la pantalla del interruptor. Si la pantalla se publica primero, el interruptor simplemente no aparece (la columna se lee aparte de la lista de clientes), sin romper nada.
+
 Configuración (después de aplicar `0031`): apuntar el destino de recordatorios al evento nuevo y desplegar `outbound-webhook-dispatch` (ejemplos de prueba).
 ```sql
 UPDATE public.outbound_webhook_endpoints SET event_types = '{booking.reminder}', updated_at = now()

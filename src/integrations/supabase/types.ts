@@ -2182,6 +2182,7 @@ export type Database = {
           gender: string | null
           id: string
           is_guest: boolean
+          is_recurring_client: boolean
           last_name: string | null
           last_relink_at: string | null
           last_visit_at: string | null
@@ -2234,6 +2235,7 @@ export type Database = {
           gender?: string | null
           id?: string
           is_guest?: boolean
+          is_recurring_client?: boolean
           last_name?: string | null
           last_relink_at?: string | null
           last_visit_at?: string | null
@@ -2286,6 +2288,7 @@ export type Database = {
           gender?: string | null
           id?: string
           is_guest?: boolean
+          is_recurring_client?: boolean
           last_name?: string | null
           last_relink_at?: string | null
           last_visit_at?: string | null
